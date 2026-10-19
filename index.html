@@ -225,6 +225,17 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .toast.show{transform:translate(-50%,0)}
 .gymseg{display:grid;grid-template-columns:repeat(4,1fr);margin:12px 0 2px}
 .seg.gymseg button{min-width:0;padding:0 4px;font-size:13px;height:44px}
+.modeseg{display:grid;grid-template-columns:1fr 1fr;margin:4px 0 8px}
+.seg.modeseg button{height:38px}
+.ph-card{padding:14px}
+.ph-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.ph-top .s{color:var(--text-2);font-size:13px;margin-top:2px}
+.ph-card .row-item{background:var(--surface-2);border-color:transparent;padding:10px 12px}
+.set-row.pset-row,.set-h.pset-h{grid-template-columns:1fr 14px 1fr 58px 48px}
+.pset-h span{text-align:center}
+.chkline{display:flex;gap:10px;align-items:center;margin:2px 0 14px;color:var(--text-2);font-size:14px}
+.chkline input{width:22px;height:22px;accent-color:var(--accent);flex:none}
+.trip{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 .pick-sec{margin:14px 0 6px;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 @keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
 @keyframes fade{from{opacity:0}}
@@ -305,7 +316,8 @@ const setsText = sets => sets.filter(s => s.done).map(s => `${fmt(num(s.w))}×${
 
 /* ============ storage ============ */
 function emptyDb() {
-  return {v: 1, exercises: [], sessions: [], active: null, rest: null, keepV2: false, settings: {rest: 120, inc: 2.5, gym: 'aalborg'}};
+  return {v: 1, exercises: [], sessions: [], active: null, rest: null, keepV2: false, physio: {programs: [], active: null}, physioV1: false,
+          settings: {rest: 120, inc: 2.5, gym: 'aalborg', mode: 'gym'}};
 }
 let readOnly = false;   // set when the stored data was written by a newer version of the app
 function load() {
@@ -346,6 +358,7 @@ function migrateGyms(d) {
 }
 let db = load();
 migrateGyms(db);
+db.physio ||= {programs: [], active: null};
 let factors = {};
 const ui = {tab: 'train', pick: new Set(), exGroup: 'all', exQuery: '', detail: null, sel: null, sheetOpen: false,
             viewGym: db.settings.gym, histLimit: 40};
@@ -498,9 +511,10 @@ function placeholder(sug, i) {
 const view = $('#view');
 function render() {
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === (ui.tab === 'detail' ? 'exercises' : ui.tab) ? 'page' : 'false'));
-  if (ui.tab === 'train') view.innerHTML = getActive() ? renderSession(getActive()) : renderStart();
-  else if (ui.tab === 'history') view.innerHTML = renderHistory();
-  else if (ui.tab === 'exercises') view.innerHTML = renderExercises();
+  if (ui.tab === 'train') view.innerHTML = getActive() ? renderSession(getActive()) : PH().active ? renderPhysioSession(PH().active)
+    : phMode() ? renderPhysioStart() : renderStart();
+  else if (ui.tab === 'history') view.innerHTML = phMode() ? renderPhysioHistory() : renderHistory();
+  else if (ui.tab === 'exercises') view.innerHTML = phMode() ? renderPhysioProgress() : renderExercises();
   else if (ui.tab === 'detail') view.innerHTML = renderDetail(ui.detail);
   tickClock();
 }
@@ -516,15 +530,18 @@ function renderStart() {
     return `<button class="gbtn" data-act="pick" data-g="${id}" aria-pressed="${ui.pick.has(id)}"><b>${name}</b><small>${lt ? agoText(lt) : '—'}</small></button>`;
   }).join('');
   const recent = db.sessions.filter(s => s.done && s.gym === db.settings.gym).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
-  return `
+  return `${modeSeg()}
     <h1>What are we hitting?</h1>
-    <div class="seg gymseg" role="group" aria-label="Gym">${GYMS.map(([id, n]) => `<button data-act="gym" data-g="${id}" aria-pressed="${db.settings.gym === id}">${n}</button>`).join('')}</div>
+    ${gymSeg()}
     <p class="sub">Pick one or more muscle groups.</p>
     <div class="groups">${btns}</div>
     <button class="btn primary block" data-act="start" ${ui.pick.size ? '' : 'disabled'}>Start workout</button>
     ${recent.length ? `<h2>Recent</h2><div class="list">${recent.map(sessionCard).join('')}</div>` : ''}`;
 }
 
+const gymSeg = () => `<div class="seg gymseg" role="group" aria-label="Gym">${GYMS.map(([id, n]) => `<button data-act="gym" data-g="${id}" aria-pressed="${db.settings.gym === id}">${n}</button>`).join('')}</div>`;
+const phMode = () => db.settings.mode === 'physio';
+const modeSeg = () => `<div class="seg modeseg" role="group" aria-label="Mode"><button data-act="mode" data-m="gym" aria-pressed="${!phMode()}">Gym</button><button data-act="mode" data-m="physio" aria-pressed="${phMode()}">Physio</button></div>`;
 function renumber(s) {
   if (s.src === 'keep') {   // imported from Keep: keep the order numbers written there, append new ones
     s.entries.forEach(en => {
@@ -618,14 +635,14 @@ function gymChips() {
 }
 function renderHistory() {
   const list = db.sessions.filter(s => s.done && (ui.viewGym === 'all' || s.gym === ui.viewGym)).sort((a, b) => b.date.localeCompare(a.date));
-  return `<h1>History</h1>${gymChips()}<p class="sub">${list.length} workouts${ui.viewGym === 'all' ? '' : ' at ' + esc(gymName(ui.viewGym))}.</p>
+  return `${modeSeg()}<h1>History</h1>${gymChips()}<p class="sub">${list.length} workouts${ui.viewGym === 'all' ? '' : ' at ' + esc(gymName(ui.viewGym))}.</p>
     <div class="list">${list.slice(0, ui.histLimit).map(sessionCard).join('') || '<div class="empty">Nothing yet.</div>'}</div>
     ${list.length > ui.histLimit ? `<button class="btn block" style="margin-top:12px" data-act="more-hist">Show older workouts</button>` : ''}`;
 }
 
 function renderExercises() {
   const chips = [['all', 'All'], ...GROUPS].map(([id, n]) => `<button class="fchip" data-act="exgroup" data-g="${id}" aria-pressed="${ui.exGroup === id}">${n}</button>`).join('');
-  return `<h1>Progress</h1>
+  return `${modeSeg()}<h1>Progress</h1>
     ${gymChips()}
     <div class="scroller">${chips}</div>
     <input class="search" type="search" placeholder="Search exercises" value="${esc(ui.exQuery)}" data-act-input="exsearch">
@@ -758,10 +775,237 @@ function renderDetail(id) {
     <p class="explain" style="margin-top:14px">* Order-adjusted: a set done as your 2nd or 3rd exercise is scaled up by how much weaker you typically are in that slot, so days are comparable.</p>`;
 }
 
+/* ============ physio mode ============ */
+// Programs from the physiotherapist (Nicklas), kept apart from the gym log: no exercise order, no PRs.
+// Each exercise has a numbered log (the Keep history has numbers, not dates) and a rule like "8–12 reps, then +2 kg".
+const PH = () => db.physio;
+const phProg = id => PH().programs.find(p => p.id === id);
+function phItem(id) { for (const p of PH().programs) { const it = p.items.find(x => x.id === id); if (it) return {p, it}; } return {}; }
+const phHere = (it, gym) => !it.retired && (!it.gym || it.gym === gym);
+const phLast = it => it.log[it.log.length - 1];
+// "22 kg × 8 reps", "5 kg × 30 s", "60 s"
+function phText(e, short) {
+  if (!e) return '';
+  const v = e.v == null ? '' : e.u === 'sec' ? `${fmt(e.v)} s` : short ? fmt(e.v) : `${fmt(e.v)} reps`;
+  const w = e.w > 0 ? `${fmt(e.w)} kg` : e.u === 'sec' ? '' : 'no weight';
+  return [w, v].filter(Boolean).join(' × ') + (e.sets && !short ? ` · ${e.sets} sets` : '');
+}
+function ruleText(it) {
+  if (it.unit === 'sec') return it.lo && it.hi ? `${fmt(it.lo)}–${fmt(it.hi)} s, then +${fmt(it.step)} kg` : 'add 5 s each time';
+  return it.lo && it.hi ? `${fmt(it.lo)}–${fmt(it.hi)} reps, then +${fmt(it.step)} kg` : 'add a rep each time';
+}
+// one step on from last time: +1 rep / +5 s, or at the top of the range add weight and start again at the bottom
+function phNext(it) {
+  const L = phLast(it); if (!L) return null;
+  const w = num(L.w) || 0;
+  if (L.u !== it.unit || L.v == null) return {w, v: it.lo || (it.unit === 'sec' ? 30 : 8), u: it.unit};
+  if (it.lo && it.hi && L.v >= it.hi && it.step > 0) return {w: w + it.step, v: it.lo, u: it.unit, up: true};
+  return {w, v: L.v + (it.unit === 'sec' ? 5 : 1), u: it.unit};
+}
+const phSets = it => [...it.log].reverse().find(e => e.sets)?.sets || 3;
+function phLastDate(p) { let d = null; for (const it of p.items) for (const e of it.log) if (e.date && (!d || e.date > d)) d = e.date; return d; }
+
+function renderPhysioStart() {
+  const gym = db.settings.gym;
+  const cards = PH().programs.map(p => {
+    const items = p.items.filter(it => phHere(it, gym)), ld = phLastDate(p);
+    const rows = items.map(it => { const L = phLast(it), nx = phNext(it); return `<button class="row-item" data-act="ph-hist" data-x="${it.id}">
+        <div class="grow"><div class="t">${esc(it.name)}</div><div class="s num">${L ? `#${L.n} · ${esc(phText(L, true))}` : 'not logged yet'}</div></div>
+        ${nx ? `<div class="r num" style="color:var(--accent);font-weight:700">→ ${esc(phText(nx, true))}</div>` : ''}</button>`; }).join('');
+    return `<div class="card ph-card">
+      <div class="ph-top"><div><h3>${esc(p.name)}</h3><div class="s">${p.by ? 'From ' + esc(p.by) + ' · ' : ''}${ld ? 'last done ' + agoText(ld) : 'history from Keep'}</div></div>
+        <button class="icon-btn" data-act="ph-prog" data-p="${p.id}" aria-label="Edit program">${ICON.edit}</button></div>
+      ${p.note ? `<div class="hint" style="margin:10px 0">📌 ${esc(p.note)}</div>` : ''}
+      <div class="list" style="gap:6px">${rows || `<p class="explain">Nothing in this program for ${esc(gymName(gym))}.</p>`}</div>
+      <button class="btn primary block" style="margin-top:12px" data-act="ph-start" data-p="${p.id}" ${items.length ? '' : 'disabled'}>Start ${esc(p.name.toLowerCase())}</button></div>`;
+  }).join('');
+  return `${modeSeg()}<h1>Physio</h1>${gymSeg()}
+    <p class="sub">Programs from your physio, kept apart from your gym log. The arrow shows the next step.</p>
+    <div class="list" style="gap:12px">${cards || '<div class="empty">No physio programs yet.</div>'}</div>`;
+}
+function phStart(pid) {
+  const p = phProg(pid), gym = db.settings.gym; if (!p) return;
+  if (getActive()) { toast('Finish the gym workout first'); return; }
+  PH().active = {id: uid(), progId: p.id, date: today(), gym, start: Date.now(),
+    entries: p.items.filter(it => phHere(it, gym)).map(it => ({itemId: it.id, w: '', v: '', sets: '', note: '', done: false}))};
+  save(); render(); window.scrollTo(0, 0);
+}
+function renderPhysioSession(a) {
+  const p = phProg(a.progId);
+  const cards = a.entries.map((en, i) => {
+    const {it} = phItem(en.itemId); if (!it) return '';
+    const L = phLast(it), nx = phNext(it), unit = it.unit === 'sec' ? 'Seconds' : 'Reps';
+    const hint = L ? `<div class="hint" data-act="ph-hist" data-x="${it.id}"><span class="more">History ›</span><b>Last</b> · #${L.n}${L.date ? ' · ' + fmtDate(L.date) : ''}: <span class="num">${esc(phText(L))}</span>
+        <span class="goal">${nx.up ? 'Level up: ' : 'Next: '}${esc(phText(nx))} <small>· ${esc(ruleText(it))}</small></span></div>`
+      : `<div class="hint">First time — ${esc(ruleText(it))}.</div>`;
+    return `<article class="ex-card" id="pcard-${it.id}">
+      <div class="ex-head"><div class="pos num">${i + 1}</div>
+        <div class="ex-title"><h3>${esc(it.name)}</h3><div class="row"><span class="slot">Session #${(L?.n || 0) + 1}</span></div></div>
+        <button class="icon-btn" data-act="ph-hist" data-x="${it.id}" aria-label="History">${ICON.chart}</button></div>
+      ${hint}
+      ${it.notes ? `<div class="hint" style="margin-top:6px">📌 ${esc(it.notes)}</div>` : ''}
+      <input class="note-in" data-act-input="ph-note" data-x="${it.id}" value="${esc(en.note)}" placeholder="${L?.note ? 'Last time: ' + esc(L.note) : 'Note (how it felt, pain…)'}">
+      <div class="sets">
+        <div class="set-h pset-h"><span>kg</span><span></span><span>${unit}</span><span>Sets</span><span></span></div>
+        <div class="set-row pset-row ${en.done ? 'done' : ''}" data-x="${it.id}">
+          <input inputmode="decimal" enterkeyhint="next" aria-label="Weight" data-pf="w" value="${esc(en.w)}" placeholder="${nx ? fmt(nx.w) : 'kg'}">
+          <span class="x">×</span>
+          <input inputmode="numeric" enterkeyhint="next" aria-label="${unit}" data-pf="v" value="${esc(en.v)}" placeholder="${nx ? fmt(nx.v) : unit.toLowerCase()}">
+          <input inputmode="numeric" enterkeyhint="done" aria-label="Sets" data-pf="sets" value="${esc(en.sets)}" placeholder="${phSets(it)}">
+          <button class="chk" data-act="ph-check" aria-label="Mark ${esc(it.name)} done">${ICON.check}</button>
+        </div></div></article>`;
+  }).join('');
+  return `<div class="sess-head"><div><h1>${esc(p?.name || 'Physio')}</h1><div class="meta">Physio · ${esc(gymName(a.gym))} · ${fmtDate(a.date, true)} · <span id="elapsed" class="num">0:00</span></div></div>
+      <button class="btn primary small" data-act="ph-finish">Finish</button></div>
+    ${p?.note ? `<div class="hint" style="margin:0 0 12px">📌 ${esc(p.note)}</div>` : ''}
+    ${cards}
+    <p class="explain" style="text-align:center">Only ticked exercises are saved — skip any you don't do today.</p>
+    <div style="text-align:center;margin-top:6px"><button class="link" data-act="ph-discard">Discard session</button></div>`;
+}
+function phFinish(force) {
+  const a = PH().active; if (!a) return;
+  const bad = a.entries.find(x => x.done && !(num(x.v) > 0));
+  if (bad) { toast(`${phItem(bad.itemId).it?.name || 'An exercise'}: enter reps or seconds`); return; }
+  const loose = a.entries.filter(x => !x.done && (x.w !== '' || x.v !== '')).length;
+  if (loose && !force) { confirmSheet('Finish session?', `${loose} exercise${loose > 1 ? 's have' : ' has'} numbers typed in but not ticked off — ${loose > 1 ? 'they' : 'it'} won't be saved.`, 'Finish anyway', () => phFinish(true)); return; }
+  const out = [];
+  for (const en of a.entries.filter(x => x.done)) {
+    const {it} = phItem(en.itemId); if (!it) continue;
+    const L = phLast(it);
+    const e = {n: (L?.n || 0) + 1, w: num(en.w) || 0, v: num(en.v), u: it.unit, date: a.date, gym: a.gym, sid: a.id};
+    if (!isFinite(e.w)) e.w = 0;
+    if (num(en.sets) > 0) e.sets = Math.round(num(en.sets));
+    if (en.note.trim()) e.note = en.note.trim();
+    it.log.push(e); out.push({it, e, up: L && e.w > (num(L.w) || 0)});
+  }
+  if (!out.length) { toast('Tick off at least one exercise first'); return; }
+  PH().active = null; db.rest = null; save(); render(); renderRest();
+  openSheet(`<h3>Physio done 💪</h3><div class="pr-list">${out.map(o => `<div class="row-item">${o.up ? '<span class="badge-pr" style="margin:0">UP</span>' : ''}
+      <div class="grow"><div class="t">${esc(o.it.name)}</div><div class="s num">#${o.e.n} · ${esc(phText(o.e))}</div></div></div>`).join('')}</div>
+    <button class="btn primary block" style="margin-top:8px" data-act="close-sheet">Nice</button>`);
+}
+function phChart(it) {
+  const log = it.log; if (!log.length) return '';
+  const byW = log.some(e => e.w > 0), y = e => byW ? (num(e.w) || 0) : (num(e.v) || 0);
+  const W = 340, H = 170, L = 36, R = 16, T = 14, B = 26;
+  let y0 = Math.min(...log.map(y)), y1 = Math.max(...log.map(y));
+  const pad = Math.max((y1 - y0) * 0.15, 1); y0 = Math.max(0, y0 - pad); y1 += pad;
+  const step = [1, 2, 2.5, 5, 10, 20, 25, 50, 100].find(st => (y1 - y0) / st <= 4) || 200;
+  const ticks = []; for (let v = Math.ceil(y0 / step) * step; v <= y1; v += step) ticks.push(v);
+  const X = i => log.length === 1 ? (L + W - R) / 2 : L + 8 + i * (W - L - R - 16) / (log.length - 1);
+  const Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  const sel = Math.min(ui.sel ?? log.length - 1, log.length - 1), dense = log.length > 12;
+  const hw = log.length > 1 ? Math.min(36, (W - L - R - 16) / (log.length - 1)) : 36;
+  const grid = ticks.map(v => `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis" x="${L - 6}" y="${Y(v) + 3}" text-anchor="end">${fmt(v)}</text>`).join('');
+  const line = log.length > 1 ? `<polyline class="ln" points="${log.map((e, i) => `${X(i)},${Y(y(e))}`).join(' ')}"/>` : '';
+  const dots = log.map((e, i) => `<g class="dot ${i === sel ? 'sel' : ''}" data-act="pt" data-i="${i}"><rect class="hit" x="${X(i) - hw / 2}" y="${T}" width="${hw}" height="${H - T}"/>
+      ${!dense || i === sel ? `<circle cx="${X(i)}" cy="${Y(y(e))}" r="${i === sel ? 6 : 4}"/>` : ''}</g>`);
+  dots.push(dots.splice(sel, 1)[0]);
+  const xl = `<text class="axis" x="${X(0)}" y="${H - 6}" text-anchor="${log.length === 1 ? 'middle' : 'start'}">#${log[0].n}</text>` +
+    (log.length > 1 ? `<text class="axis" x="${X(log.length - 1)}" y="${H - 6}" text-anchor="end">#${log[log.length - 1].n}</text>` : '');
+  const e = log[sel];
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Progress">${grid}${line}${dots.join('')}${xl}</svg></div>
+    <div class="readout"><b>#${e.n}</b> · ${e.date ? fmtDate(e.date, true) : 'from Keep'} · <span class="num">${esc(phText(e))}</span>${e.note ? `<br><i>${esc(e.note)}</i>` : ''}</div>`;
+}
+function physioSheet(id, keepScroll) {
+  const {p, it} = phItem(id); if (!it) return;
+  const top = sheet.scrollTop, log = it.log, L = phLast(it), nx = phNext(it);
+  const first = log.find(e => e.w > 0), dated = log.filter(e => e.date).length;
+  const recent = log.slice().reverse().slice(0, ui.phAll ? log.length : 8);
+  const byW = log.some(e => e.w > 0);
+  openSheet(`<h3 style="margin-bottom:6px">${esc(it.name)}</h3>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"><span class="chip">${esc(p.name)}</span>${it.gym ? `<span class="chip gym">${esc(gymName(it.gym))}</span>` : ''}${it.retired ? '<span class="chip">Old version</span>' : ''}<span class="chip">${esc(ruleText(it))}</span></div>
+    ${it.notes ? `<p class="explain" style="margin:0 0 12px">📌 ${esc(it.notes)}</p>` : ''}
+    ${log.length ? `<div class="stats two">
+        <div class="stat"><div class="k">Sessions</div><div class="v num">${log.length}</div><div class="d">${dated ? dated + ' logged in the app' : 'all from Keep'}</div></div>
+        <div class="stat"><div class="k">Last</div><div class="v num" style="font-size:19px">${esc(phText(L, true)) || '–'}</div><div class="d">#${L.n}${L.date ? ' · ' + fmtDate(L.date) : ''}</div></div>
+        ${first && L.w > 0 ? `<div class="stat"><div class="k">Weight</div><div class="v num">${fmt(first.w)}→${fmt(L.w)}<small> kg</small></div><div class="d">since #${first.n}</div></div>` : ''}
+        ${nx && !it.retired ? `<div class="stat"><div class="k">Next</div><div class="v num" style="font-size:19px;color:var(--accent)">${esc(phText(nx, true))}</div><div class="d">${nx.up ? 'level up' : 'one step on'}</div></div>` : ''}
+      </div>
+      <div class="card chart-card" style="margin-bottom:12px"><div class="ct">Progress</div>
+        <div class="cs">${byW ? 'Weight' : it.unit === 'sec' ? 'Seconds' : 'Reps'} per session. Tap a point to see that session.</div>${phChart(it)}</div>
+      <h2 style="margin-top:16px">Log</h2>
+      <div class="card" style="padding:4px 16px">${recent.map(e => `<div class="hrow"><div class="l1"><span>#${e.n}${e.date ? ' · ' + fmtDate(e.date, true) : ''}</span>${e.gym && !it.gym ? `<span class="ord">${esc(gymName(e.gym))}</span>` : ''}</div>
+        <div class="l2 num">${esc(phText(e)) || '–'}</div>${e.note ? `<div class="l3">${esc(e.note)}</div>` : ''}</div>`).join('')}</div>
+      ${log.length > recent.length ? `<button class="btn block" style="margin-top:12px" data-act="ph-all" data-x="${it.id}">Show all ${log.length}</button>` : ''}`
+    : '<div class="empty">No sessions yet.</div>'}
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn block" data-act="ph-edit" data-x="${it.id}">${ICON.edit} Edit</button>
+      <button class="btn primary block" data-act="close-sheet">${PH().active ? 'Back to session' : 'Close'}</button></div>`);
+  ui.sheetPh = id;
+  if (keepScroll) sheet.scrollTop = top;
+}
+function phProgSheet(pid) {
+  const p = phProg(pid); if (!p) return;
+  openSheet(`<h3>${esc(p.name)}</h3>
+    <label class="field"><span>Program name</span><input data-act-input="ph-pname" data-p="${p.id}" value="${esc(p.name)}"></label>
+    <label class="field"><span>Note from your physio</span><textarea data-act-input="ph-pnote" data-p="${p.id}" rows="3">${esc(p.note)}</textarea></label>
+    <div class="pick-sec">Exercises</div>
+    <div class="list">${p.items.map(it => `<button class="row-item" data-act="ph-edit" data-x="${it.id}"><div class="grow"><div class="t">${esc(it.name)}</div>
+      <div class="s">${[it.gym ? gymName(it.gym) : 'Any gym', it.retired ? 'old version' : '', `${it.log.length} sessions`].filter(Boolean).map(esc).join(' · ')}</div></div>${ICON.edit.replace('<svg', '<svg class="chev"')}</button>`).join('')}</div>
+    <button class="btn block" style="margin-top:12px" data-act="ph-new" data-p="${p.id}">${ICON.plus} Add exercise</button>
+    <button class="btn primary block" style="margin-top:8px" data-act="close-sheet">Done</button>`);
+}
+function phEditForm(id, pid) {
+  const {p, it} = id ? phItem(id) : {p: phProg(pid), it: null}; if (!p) return;
+  const v = (k, d) => esc(it ? (it[k] ?? '') : d);
+  openSheet(`<h3>${it ? 'Edit physio exercise' : 'New physio exercise'}</h3>
+    <form id="phForm" data-x="${it?.id || ''}" data-p="${p.id}">
+      <label class="field"><span>Name</span><input name="name" required value="${v('name', '')}"></label>
+      <label class="field"><span>Gym</span><select name="gym">${[['', 'Any gym'], ...GYMS].map(([g, n]) => `<option value="${g}" ${(it ? it.gym || '' : '') === g ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label class="field"><span>Measured in</span><select name="unit"><option value="reps" ${it?.unit !== 'sec' ? 'selected' : ''}>Reps</option><option value="sec" ${it?.unit === 'sec' ? 'selected' : ''}>Seconds (holds)</option></select></label>
+      <div class="field"><span>Progression rule</span><div class="trip">
+        <input name="lo" inputmode="numeric" aria-label="From" placeholder="from" value="${v('lo', 8)}">
+        <input name="hi" inputmode="numeric" aria-label="To" placeholder="to" value="${v('hi', 12)}">
+        <input name="step" inputmode="decimal" aria-label="Then add kg" placeholder="+kg" value="${v('step', 2)}"></div>
+        <p class="explain" style="margin:6px 0 0;font-size:13px">From–to reps (or seconds), then add this many kg and start again. Leave from/to empty to just add a rep (or 5 s) each time.</p></div>
+      <label class="field"><span>Notes</span><input name="notes" value="${v('notes', '')}" placeholder="e.g. 3 s lowering"></label>
+      <label class="chkline"><input type="checkbox" name="retired" ${it?.retired ? 'checked' : ''}> Old version — hide it from sessions (its history is kept)</label>
+      <button class="btn primary block" type="submit">${it ? 'Save' : 'Add'}</button>
+      ${it ? `<button class="btn danger block" type="button" style="margin-top:8px" data-act="ph-del" data-x="${it.id}">${ICON.trash} Delete exercise</button>` : ''}
+    </form>`);
+}
+function phSessions() {
+  const by = {};
+  for (const p of PH().programs) for (const it of p.items) for (const e of it.log)
+    if (e.sid) (by[e.sid] ||= {sid: e.sid, date: e.date, gym: e.gym, p, rows: []}).rows.push({it, e});
+  return Object.values(by).sort((a, b) => b.date.localeCompare(a.date));
+}
+function renderPhysioHistory() {
+  const list = phSessions();
+  return `${modeSeg()}<h1>Physio history</h1>
+    <p class="sub">${list.length} session${list.length === 1 ? '' : 's'} logged in the app. The Keep history has no dates — open an exercise under Progress to see it.</p>
+    <div class="list">${list.map(x => `<div class="hcard"><div class="top-line"><span class="date">${fmtDate(x.date, true)} <small style="color:var(--muted);font-weight:600">· ${esc(gymName(x.gym))}</small></span>
+        <span style="display:flex;gap:4px;align-items:center"><span class="chip">${esc(x.p.name)}</span><button class="icon-btn" style="width:32px;height:32px" data-act="ph-sdel" data-s="${x.sid}" aria-label="Delete session">${ICON.trash}</button></span></div>
+      <ol>${x.rows.map((r, i) => `<li><span class="n num">${i + 1}</span><span><b>${esc(r.it.name)}</b><br><span class="sets-t num">#${r.e.n} · ${esc(phText(r.e))}</span></span></li>`).join('')}</ol></div>`).join('')
+      || '<div class="empty">No physio sessions logged in the app yet.</div>'}</div>`;
+}
+function renderPhysioProgress() {
+  const row = it => { const L = phLast(it); return `<button class="row-item" data-act="ph-hist" data-x="${it.id}">
+      <div class="grow"><div class="t">${esc(it.name)}</div><div class="s">${[it.gym ? gymName(it.gym) : '', it.retired ? 'old version' : '', `${it.log.length} sessions`].filter(Boolean).map(esc).join(' · ')}</div></div>
+      <div class="r num">${L ? `#${L.n}<br>${esc(phText(L, true))}` : 'no data'}</div>${ICON.chev}</button>`; };
+  return `${modeSeg()}<h1>Physio progress</h1>` + PH().programs.map(p => `<h2>${esc(p.name)}</h2>
+    <div class="list">${p.items.filter(it => !it.retired).map(row).join('')}</div>
+    ${p.items.some(it => it.retired) ? `<div class="pick-sec" style="margin-top:12px">Old versions</div><div class="list">${p.items.filter(it => it.retired).map(row).join('')}</div>` : ''}`).join('');
+}
+// one-time import of the physio programs (physio-seed.json, built from the two Keep notes)
+async function importPhysio() {
+  if (db.physioV1 || readOnly) return;
+  let data;
+  try { const r = await fetch('physio-seed.json', {cache: 'no-cache'}); if (!r.ok) return; data = await r.json(); }
+  catch (e) { return; }   // offline: try again next launch
+  if (db.physioV1 || readOnly) return;
+  if (!data || !Array.isArray(data.programs) || !data.programs.every(p => p && p.id && Array.isArray(p.items) && p.items.every(it => it && it.id && Array.isArray(it.log)))) return;
+  const have = new Set(PH().programs.map(p => p.id));
+  PH().programs.push(...data.programs.filter(p => !have.has(p.id)));
+  db.physioV1 = true; save();
+  if (!getActive() && !PH().active && !ui.sheetOpen && ui.tab !== 'detail') render();
+  toast('Physio programs added — switch to Physio on the Train tab');
+}
+
 /* ============ sheet ============ */
 const sheetWrap = $('#sheet'), sheet = $('.sheet');
 function openSheet(html) {
-  ui.sheetEx = null;
+  ui.sheetEx = null; ui.sheetPh = null;
   sheet.innerHTML = '<div class="grab"></div>' + html;
   if (!ui.sheetOpen) { if (!ui.reuseEntry) history.pushState({sheet: 1}, ''); ui.sheetOpen = true; }
   sheetWrap.hidden = false;
@@ -772,6 +1016,7 @@ function closeSheet(fromPop) {
   if (!ui.sheetOpen) return;
   ui.sheetOpen = false; sheetWrap.hidden = true; sheet.innerHTML = '';
   if (!fromPop) silentBack();
+  if (ui.redraw) { ui.redraw = false; render(); }
 }
 // go back one history entry when the screen is already updated, so the popstate it causes is ignored
 let skipPops = 0;
@@ -844,7 +1089,7 @@ function settingsSheet() {
       <p class="explain" style="margin:0 0 8px">Everything lives only on this phone. Export a backup now and then (e.g. to Google Drive).</p>
       <div style="display:flex;gap:8px"><button class="btn block" data-act="export">Export</button><button class="btn block" data-act="import">Import</button></div></div>
     <div style="margin-top:18px"><button class="btn danger block" data-act="reset">Erase all data</button></div>
-    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v2 · works offline</p>`);
+    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v3 · works offline</p>`);
 }
 
 function sessionSheet(s) {
@@ -918,9 +1163,9 @@ $('#importFile').addEventListener('change', async ev => {
       d.sessions.every(s => s && s.id && /^\d{4}-\d\d-\d\d$/.test(s.date) && Array.isArray(s.entries) &&
         s.entries.every(en => en && en.exId && Array.isArray(en.sets)));
     if (!ok) throw new Error('bad');
-    confirmSheet('Replace all data?', `The backup has ${d.sessions.filter(s => s.done).length} workouts and ${d.exercises.length} exercises. It replaces what is on this phone now.`, 'Replace', () => {
+    confirmSheet('Replace all data?', `The backup has ${d.sessions.filter(s => s.done).length} workouts and ${d.exercises.length} exercises. It replaces what is on this phone now${PH().programs.length && !d.physio ? ' — physio sessions logged in the app are not in it and will be lost' : ''}.`, 'Replace', () => {
       try { localStorage.setItem(KEY + '.before-import', JSON.stringify(db)); } catch (e) {}
-      leaveDetail(); db = d; computeFactors(); recomputePRs(); save(); ui.tab = 'train'; render(); renderRest(); toast('Backup restored');
+      leaveDetail(); db = d; db.physio ||= {programs: [], active: null}; computeFactors(); recomputePRs(); save(); ui.tab = 'train'; render(); renderRest(); toast('Backup restored'); importPhysio();
     });
   } catch (e) { toast('That file is not a Liftbook backup'); }
 });
@@ -955,7 +1200,7 @@ function renderRest() {
   } else $('#restTm').textContent = t;
 }
 function tickClock() {
-  const s = getActive(), el = $('#elapsed');
+  const s = getActive() || PH().active, el = $('#elapsed');
   if (s && el && s.start) { const m = Math.floor((Date.now() - s.start) / 60000); el.textContent = m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} min`; }
 }
 setInterval(() => {
@@ -973,6 +1218,44 @@ document.addEventListener('click', ev => {
   const act = el.dataset.act;
   switch (act) {
     case 'tab': if (ui.sheetOpen) closeSheet(); if (ui.tab === 'detail') silentBack(); ui.tab = el.dataset.tab; ui.sel = null; render(); window.scrollTo(0, 0); break;
+    case 'mode': db.settings.mode = el.dataset.m; ui.sel = null; save(); render(); break;
+    case 'ph-start': phStart(el.dataset.p); break;
+    case 'ph-check': {
+      const row = el.closest('.pset-row'), en = PH().active?.entries.find(e => e.itemId === row.dataset.x); if (!en) break;
+      if (en.done) { en.done = false; row.classList.remove('done'); save(); break; }
+      const inp = f => { const i = row.querySelector(`[data-pf="${f}"]`); if (i.value === '' && isFinite(num(i.placeholder))) i.value = i.placeholder; return i; };
+      const wi = inp('w'), vi = inp('v'), si = inp('sets');
+      if (!(num(vi.value) > 0)) { toast('Enter reps or seconds first'); vi.focus(); break; }
+      en.w = isFinite(num(wi.value)) ? wi.value.replace(',', '.') : '0'; wi.value = en.w;
+      en.v = String(num(vi.value)); en.sets = num(si.value) > 0 ? String(Math.round(num(si.value))) : '';
+      en.done = true; row.classList.add('done'); save(); startRest();
+      try { navigator.vibrate?.(15); } catch (e) {}
+      break;
+    }
+    case 'ph-finish': phFinish(); break;
+    case 'ph-discard': confirmSheet('Discard session?', 'Nothing from this physio session will be saved.', 'Discard', () => { PH().active = null; db.rest = null; save(); render(); renderRest(); }); break;
+    case 'ph-hist': ui.sel = null; ui.phAll = false; physioSheet(el.dataset.x); break;
+    case 'ph-all': ui.phAll = true; physioSheet(el.dataset.x, true); break;
+    case 'ph-prog': phProgSheet(el.dataset.p); break;
+    case 'ph-edit': phEditForm(el.dataset.x); break;
+    case 'ph-new': phEditForm(null, el.dataset.p); break;
+    case 'ph-del': {
+      const {p, it} = phItem(el.dataset.x); if (!it) { closeSheet(); break; }
+      confirmSheet('Delete exercise?', `Its ${it.log.length} logged session${it.log.length === 1 ? '' : 's'} will be removed too. To just stop doing it, mark it as an old version instead.`, 'Delete', () => {
+        p.items = p.items.filter(x => x !== it);
+        if (PH().active) PH().active.entries = PH().active.entries.filter(en => en.itemId !== it.id);
+        save(); render();
+      });
+      break;
+    }
+    case 'ph-sdel': {
+      const sid = el.dataset.s;
+      confirmSheet('Delete physio session?', 'Removes what you logged in that session.', 'Delete', () => {
+        for (const p of PH().programs) for (const it of p.items) it.log = it.log.filter(e => e.sid !== sid);
+        save(); render();
+      });
+      break;
+    }
     case 'gym': db.settings.gym = ui.viewGym = el.dataset.g; save(); render(); break;
     case 'viewgym': ui.viewGym = el.dataset.g; ui.histLimit = 40; render(); break;
     case 'more-hist': ui.histLimit += 60; render(); break;
@@ -1045,7 +1328,7 @@ document.addEventListener('click', ev => {
     case 'session': sessionSheet(db.sessions.find(s => s.id === el.dataset.s)); break;
     case 'del-session': { const id = el.dataset.s; confirmSheet('Delete workout?', 'This removes it from your history.', 'Delete', () => { db.sessions = db.sessions.filter(s => s.id !== id); computeFactors(); recomputePRs(); save(); render(); }); break; }
     case 'edit-session': {
-      if (getActive()) { closeSheet(); toast('Finish the current workout first'); break; }
+      if (getActive() || PH().active) { closeSheet(); toast('Finish the current workout first'); break; }
       const s = db.sessions.find(x => x.id === el.dataset.s);
       db.editBackup = JSON.parse(JSON.stringify(s));
       s.done = false; db.active = s.id; computeFactors(); save(); closeSheet(); ui.tab = 'train'; render(); break;
@@ -1056,7 +1339,7 @@ document.addEventListener('click', ev => {
       if (ui.tab !== 'detail') { ui.detailFrom = ui.tab; ui.returnY = window.scrollY; }
       ui.detail = el.dataset.x; ui.sel = null; ui.tab = 'detail'; render(); window.scrollTo(0, 0); break;
     case 'back': history.back(); break;
-    case 'pt': ui.sel = +el.dataset.i; if (ui.sheetOpen && ui.sheetEx) historySheet(ui.sheetEx, true); else render(); break;
+    case 'pt': ui.sel = +el.dataset.i; if (ui.sheetOpen && ui.sheetPh) physioSheet(ui.sheetPh, true); else if (ui.sheetOpen && ui.sheetEx) historySheet(ui.sheetEx, true); else render(); break;
     case 'ex-hist': ui.sel = null; historySheet(el.dataset.x); break;
     case 'new-ex': exerciseForm(null, el.dataset.from); break;
     case 'edit-ex': exerciseForm(getEx(el.dataset.x)); break;
@@ -1074,14 +1357,20 @@ document.addEventListener('click', ev => {
     case 'set-rest': db.settings.rest = +el.dataset.v; save(); settingsSheet(); break;
     case 'export': exportData(); break;
     case 'import': $('#importFile').click(); break;
-    case 'reset': confirmSheet('Erase everything?', 'All exercises and workouts on this phone will be deleted. Export a backup first if you might want them.', 'Erase', () => { leaveDetail(); try { localStorage.setItem(KEY + '.before-erase', JSON.stringify(db)); } catch (e) {} db = {v: 1, exercises: [], sessions: [], active: null, rest: null, keepV2: true, settings: db.settings}; computeFactors(); save(); ui.tab = 'train'; render(); renderRest(); }); break;
+    case 'reset': confirmSheet('Erase everything?', 'All exercises and workouts on this phone will be deleted. Export a backup first if you might want them.', 'Erase', () => { leaveDetail(); try { localStorage.setItem(KEY + '.before-erase', JSON.stringify(db)); } catch (e) {} db = {v: 1, exercises: [], sessions: [], active: null, rest: null, keepV2: true, physio: {programs: [], active: null}, physioV1: true, settings: db.settings}; computeFactors(); save(); ui.tab = 'train'; render(); renderRest(); }); break;
     case 'rest-add': db.rest.end += +el.dataset.v * 1000; save(); restEl.dataset.mode = ''; renderRest(); break;
     case 'rest-stop': db.rest = null; save(); restEl.dataset.mode = ''; renderRest(); break;
   }
 });
 document.addEventListener('input', ev => {
   const el = ev.target;
-  if (el.dataset.f) {
+  if (el.dataset.pf) {
+    const en = PH().active?.entries.find(e => e.itemId === el.closest('.pset-row').dataset.x);
+    if (en) { en[el.dataset.pf] = el.value; save(); }
+  } else if (el.dataset.actInput === 'ph-note') { const en = PH().active?.entries.find(e => e.itemId === el.dataset.x); if (en) { en.note = el.value; save(); } }
+  else if (el.dataset.actInput === 'ph-pnote' || el.dataset.actInput === 'ph-pname') {
+    const p = phProg(el.dataset.p); if (p) { p[el.dataset.actInput === 'ph-pnote' ? 'note' : 'name'] = el.value; save(); ui.redraw = true; }
+  } else if (el.dataset.f) {
     const row = el.closest('.set-row'), en = findEntry(row.dataset.en);
     if (en) { en.sets[+row.dataset.i][el.dataset.f] = el.value; save(); }
   } else if (el.dataset.actInput === 'note') { const en = findEntry(el.dataset.en); if (en) { en.note = el.value; save(); } }
@@ -1089,6 +1378,12 @@ document.addEventListener('input', ev => {
   else if (el.dataset.actInput === 'picksearch') { $('#picklist').innerHTML = pickList(el.value); }
 });
 document.addEventListener('keydown', ev => {
+  if (ev.key === 'Enter' && ev.target.dataset.pf) {
+    ev.preventDefault();
+    const row = ev.target.closest('.pset-row'), next = {w: 'v', v: 'sets'}[ev.target.dataset.pf];
+    if (next) row.querySelector(`[data-pf="${next}"]`).focus(); else { ev.target.blur(); if (!row.classList.contains('done')) row.querySelector('.chk').click(); }
+    return;
+  }
   if (ev.key !== 'Enter' || !ev.target.dataset.f) return;
   ev.preventDefault();
   const row = ev.target.closest('.set-row');
@@ -1096,6 +1391,21 @@ document.addEventListener('keydown', ev => {
   else { ev.target.blur(); row.querySelector('.chk').click(); }
 });
 document.addEventListener('submit', ev => {
+  if (ev.target.id === 'phForm') {
+    ev.preventDefault();
+    const f = new FormData(ev.target), p = phProg(ev.target.dataset.p), id = ev.target.dataset.x;
+    if (!p) { closeSheet(); return; }
+    const pos = k => num(f.get(k)) > 0 ? num(f.get(k)) : null;
+    const data = {name: f.get('name').trim(), gym: f.get('gym'), unit: f.get('unit') === 'sec' ? 'sec' : 'reps', lo: pos('lo'), hi: pos('hi'), step: pos('step') || 0,
+                  notes: f.get('notes').trim(), retired: !!f.get('retired')};
+    if (!data.name) return;
+    if (!data.lo !== !data.hi) { toast('Fill in both "from" and "to", or neither'); return; }
+    if (data.lo && data.lo > data.hi) { toast('"From" must be below "to"'); return; }
+    if (id) { const {it} = phItem(id); if (!it) { closeSheet(); return; } Object.assign(it, data); }
+    else p.items.push({id: uid(), ...data, log: []});
+    save(); closeSheet(); render(); toast('Saved');
+    return;
+  }
   if (ev.target.id !== 'exForm') return;
   ev.preventDefault();
   const f = new FormData(ev.target), id = ev.target.dataset.x, from = ev.target.dataset.from;
@@ -1113,9 +1423,9 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { re
 
 /* ============ boot ============ */
 computeFactors(); recomputePRs();
-if (getActive()) ui.tab = 'train';
+if (getActive() || PH().active) ui.tab = 'train';
 render(); renderRest();
-importKeep();
+importKeep().then(importPhysio);
 try { navigator.storage?.persist?.(); } catch (e) {}
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

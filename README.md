@@ -28,3 +28,10 @@ Aalborg (Gym & Fitness), Brønderslev, Klarup, Other (Manna, Hals, FW…). Chose
 - Order: "3." after the date = 3rd exercise; "(1. Bryst)" = 1st chest exercise. Entries with no number get pos/gpos 0 = "order not noted" (excluded from the order model, shown as ?).
 - 8 entries with impossible dates (e.g. "18/20-2023") were skipped.
 - The app imports `keep-seed.json` once (`db.keepV2`). A corrected seed needs a new flag (e.g. keepV3).
+
+## Physio mode (v3)
+- Two unlabelled Keep notes from the physio, "Nicklas skulder" and "Nicklas træningsprogram ben", are their own mode (Gym/Physio toggle at the top). They are kept in `db.physio`, apart from the gym log: no order model, no PRs.
+- `keep-import/build_physio.py nicklas.json ../physio-seed.json` → `physio-seed.json` (2 programs, 20 exercises incl. old versions). The raw note text is in `keep-import/nicklas.json`. Exercise headings, rules and translations are hand-written in the script.
+- The notes are numbered sessions without dates ("12. 22×8"). Timed holds are kg × seconds. Each exercise has a rule: from–to reps/seconds, then +kg. The app suggests one step on (+1 rep / +5 s, or +kg at the top of the range).
+- Gym-specific versions (leg press, calf hold, last exercise) show only at their gym. Old versions are hidden from sessions but keep their history.
+- Imported once (`db.physioV1`).
