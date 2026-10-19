@@ -18,5 +18,13 @@ Offline gym log (PWA) that tracks the **order** you do exercises in. Replaces th
 - Suggestions scale last time's weights by factor(today's slot) / factor(last slot). Charts and PRs use 1RM ÷ factor ("as if done first").
 - Cross-muscle fatigue (e.g. triceps after chest pressing) is not modelled.
 
-## Data imported from Keep (v1)
-Chest only, with history: Incline Press Machine, Pec Deck, Chest Press Machine (Brønderslev, 31 Aug + 13 Sep 2026), Incline Smith (Manna, 2024), Cable Fly high pulley (Nov 2025). Pec Deck's Keep date "31/09-2026" was read as 31 Aug. Other groups: exercise names only. Calves, Abs and Traps not imported yet.
+## Gyms
+Aalborg (Gym & Fitness), Brønderslev, Klarup, Other (Manna, Hals, FW…). Chosen on the start screen (`settings.gym`); each workout has `gym`, each exercise has `gym` ('' = any gym). Picking another gym's exercise during a workout makes a copy for the current gym (separate history). Progress and History have their own gym filter.
+
+## Keep import (v2)
+- All 135 Keep notes were scraped 19 Oct 2026 → `keep-import/keep.json` (raw, NOT deployed).
+- `keep-import/build_seed.py keep.json ../keep-seed.json keep-import/translations.json` builds `keep-seed.json` (455 workouts, 177 exercises, 2,974 sets). Danish notes are translated via `translations.json`.
+- Gym rules: a note/line mentioning Manna/Hals/FW → Other; Brønderslev → Brønderslev; otherwise Aalborg (user's own convention: "no tag = GF"). Unnamed exercises on a day where another exercise names the gym get that gym.
+- Order: "3." after the date = 3rd exercise; "(1. Bryst)" = 1st chest exercise. Entries with no number get pos/gpos 0 = "order not noted" (excluded from the order model, shown as ?).
+- 8 entries with impossible dates (e.g. "18/20-2023") were skipped.
+- The app imports `keep-seed.json` once (`db.keepV2`). A corrected seed needs a new flag (e.g. keepV3).

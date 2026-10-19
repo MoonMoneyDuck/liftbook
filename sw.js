@@ -1,7 +1,7 @@
 // Offline support: open instantly from the phone's cache, fetch the newest version in the background,
 // and tell the page when a new version has arrived so it can offer a reload.
-const CACHE = 'liftbook-v1';
-const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
+const CACHE = 'liftbook-v2';
+const FILES = ['./', 'index.html', 'keep-seed.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
