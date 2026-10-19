@@ -145,6 +145,16 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .stat .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700}
 .stat .v{font-size:22px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
 .stat .v small{font-size:13px;color:var(--text-2);font-weight:600}
+.stats.two{grid-template-columns:1fr 1fr}
+.stat .d{font-size:12px;color:var(--muted);margin-top:2px}
+.stat .v.up{color:var(--good)} .stat .v.down{color:var(--danger)}
+.otable{width:100%;border-collapse:collapse;font-size:14px}
+.otable th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;text-align:left;padding:0 6px 6px;font-weight:700}
+.otable td{padding:9px 6px;border-top:1px solid var(--line)}
+.otable td.n{text-align:right;font-variant-numeric:tabular-nums}
+.otable .pct{color:var(--text-2);font-size:12px}
+.hint[data-act]{cursor:pointer}
+.hint .more{float:right;color:var(--muted);font-size:12px;font-weight:700}
 .chart-card{padding:14px 10px 10px}
 .chart-card .ct{padding:0 6px;font-weight:700}
 .chart-card .cs{padding:0 6px;color:var(--muted);font-size:12px;margin-top:2px}
@@ -557,7 +567,7 @@ function exerciseCard(s, en) {
       const pct = Math.round((sug.ratio - 1) * 100);
       goal = `Aim ~${fmt(sug.w)} × ${sug.r} <small>· ${ord(k)} today vs ${ord(L.slot)} last time (${pct > 0 ? '+' : ''}${pct}%)</small>`;
     }
-    hint = `<div class="hint">${lastLine}<span class="goal">${goal}</span></div>`;
+    hint = `<div class="hint" data-act="ex-hist" data-x="${en.exId}"><span class="more">History ›</span>${lastLine}<span class="goal">${goal}</span></div>`;
   }
   const lastNote = sug?.last.en.note;
   const rows = en.sets.map((st, i) => {
@@ -579,6 +589,7 @@ function exerciseCard(s, en) {
         <h3>${esc(ex.name)}</h3>
         <div class="row">${ex.gym && ex.gym !== s.gym ? `<span class="chip gym">${esc(gymName(ex.gym))}</span>` : ''}<span class="slot">${known(en) ? `${ord(k)} ${esc(gName(ex.groupId).toLowerCase())} exercise` : 'order not noted'}</span></div>
       </div>
+      ${getEx(en.exId) ? `<button class="icon-btn" data-act="ex-hist" data-x="${en.exId}" aria-label="History and stats">${ICON.chart}</button>` : ''}
       <button class="icon-btn" data-act="ex-menu" data-en="${en.id}" aria-label="Options">${ICON.dots}</button>
     </div>
     ${hint}
@@ -639,7 +650,7 @@ function exRows() {
 
 function chartSVG(h) {
   const bw = h.every(x => !(x.best > 0));   // bodyweight exercise: chart reps instead
-  const pts = h.slice().reverse().map(x => ({y: bw ? num(x.top.r) : freshEq(x), x}));
+  const pts = h.filter(x => bw || x.best > 0).reverse().map(x => ({y: bw ? num(x.top.r) : freshEq(x), x}));
   if (!pts.length) return '<div class="empty">Log this exercise to see a trend.</div>';
   const W = 340, H = 180, L = 36, R = 16, T = 14, B = 26;
   let y0 = Math.min(...pts.map(p => p.y)), y1 = Math.max(...pts.map(p => p.y));
@@ -665,30 +676,83 @@ function chartSVG(h) {
     <div class="readout"><b>${fmtDate(p.x.date, true)}</b> · ${p.x.known ? ord(p.x.slot) + ' exercise' : 'order not noted'}<br><span class="num">${esc(setsText(p.x.en.sets))}</span><br>
     ${bw ? `Top set <b class="num">${p.x.top.r} reps</b>` : `Est. 1RM <b class="num">${fmt(Math.round(p.x.best))} kg</b>${adj}`}</div>`;
 }
+// headline numbers + how this exercise goes depending on its order in the workout
+function exStats(h) {
+  if (!h.length) return '';
+  const bw = h.every(x => !(x.best > 0));
+  const avg = a => a.reduce((t, v) => t + v, 0) / a.length;
+  const hw = bw ? h : h.filter(x => x.best > 0);   // weighted days only (0 kg days would read as a 1RM of 0)
+  const val = x => bw ? num(x.top.r) : freshEq(x);
+  const recent = hw.slice(0, 3).map(val), before = hw.slice(3, 6).map(val);
+  const trend = hw.length >= 6 && avg(before) > 0 ? Math.round((avg(recent) / avg(before) - 1) * 100) : null;
+  const heavy = hw.reduce((a, x) => num(x.top.w) > num(a.top.w) || (num(x.top.w) === num(a.top.w) && num(x.top.r) > num(a.top.r)) ? x : a, hw[0]);
+  const bestAdj = bw ? null : hw.reduce((a, x) => freshEq(x) > freshEq(a) ? x : a, hw[0]);
+  const in90 = h.filter(x => daysAgo(x.date) <= 90).length;
+  const tiles = `<div class="stats two">
+    <div class="stat"><div class="k">Sessions</div><div class="v num">${h.length}</div><div class="d">${in90} in the last 90 days</div></div>
+    <div class="stat"><div class="k">Trend</div><div class="v num ${trend > 0 ? 'up' : trend < 0 ? 'down' : ''}">${trend === null ? '–' : (trend > 0 ? '+' : '') + trend + '%'}</div><div class="d">${trend === null ? 'needs 6 sessions' : (bw ? 'reps' : 'adjusted 1RM') + ', last 3 vs 3 before'}</div></div>
+    ${bw ? `<div class="stat"><div class="k">Last time</div><div class="v num">${h[0].top.r}<small> reps</small></div><div class="d">${fmtDate(h[0].date)}</div></div>`
+         : `<div class="stat"><div class="k">Heaviest set</div><div class="v num">${fmt(num(heavy.top.w))}<small>×${heavy.top.r}</small></div><div class="d">${fmtDate(heavy.date)}</div></div>`}
+    <div class="stat"><div class="k">${bw ? 'Most reps' : 'Best 1RM*'}</div><div class="v num">${bw ? Math.max(...h.map(x => num(x.top.r))) : Math.round(freshEq(bestAdj)) + '<small> kg</small>'}</div><div class="d">${bw ? '' : fmtDate(bestAdj.date) + (bestAdj.known && bestAdj.slot > 1 ? ' · as ' + ord(bestAdj.slot) : '')}</div></div>
+  </div>`;
+  if (bw) return tiles;
+  const by = {};
+  for (const x of hw) { const k = x.known ? Math.min(x.slot, 4) : 0; (by[k] ||= []).push(x); }
+  const learned = factors[2].n >= 5;
+  const note = `Across all exercises ${learned ? `you're about ${Math.round((1 - fac(2)) * 100)}% weaker` : `the app assumes you're about ${Math.round((1 - fac(2)) * 100)}% weaker`} as the 2nd exercise for a muscle, and adjusts suggestions and the chart for that.`;
+  if ([1, 2, 3, 4].filter(k => by[k]).length < 2)   // nothing to compare on this exercise
+    return tiles + `<p class="explain" style="margin:0 0 12px;font-size:13px">${note}</p>`;
+  const rows = [1, 2, 3, 4, 0].filter(k => by[k]).map(k => {
+    const xs = by[k], a = avg(xs.map(x => x.best));
+    const top = xs.reduce((m, x) => x.best > m.best ? x : m, xs[0]);
+    return `<tr><td><b>${k === 0 ? 'Not noted' : k === 4 ? '4th+' : ord(k)}</b></td><td class="n">${xs.length}</td>
+      <td class="n">${fmt(num(top.top.w))}×${top.top.r}</td>
+      <td class="n">${Math.round(a)} kg</td></tr>`;
+  }).join('');
+  return tiles + `<div class="card" style="margin:0 0 12px">
+    <div class="ct" style="font-weight:700;margin-bottom:8px">By order in the workout</div>
+    <table class="otable"><thead><tr><th>Done as</th><th style="text-align:right">Times</th><th style="text-align:right">Best (est.)</th><th style="text-align:right">Avg 1RM</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="explain" style="margin:10px 0 0;font-size:13px">Your actual numbers, not adjusted — they also depend on when in your training history you did each slot. ${note}</p></div>`;
+}
+function recentRows(h) {
+  return h.map(x => `<div class="hrow">
+      <div class="l1"><span>${fmtDate(x.date, true)}${x.en.pr ? '<span class="badge-pr">PR</span>' : ''}</span><span class="ord">${x.known ? ord(x.slot) : '–'}</span></div>
+      <div class="l2 num">${esc(setsText(x.en.sets))}</div>
+      ${x.en.note ? `<div class="l3">${esc(x.en.note)}</div>` : ''}</div>`).join('');
+}
+const chartCard = h => `<div class="card chart-card" style="margin-bottom:12px">
+      <div class="ct">Strength trend</div>
+      <div class="cs">Estimated 1RM, adjusted as if done first. Tap a point for that day — the number is the exercise order (? = not noted).</div>
+      ${chartSVG(h)}
+    </div>`;
+// the history of one exercise in a sheet over the workout, so you never leave it
+function historySheet(exId, keepScroll) {
+  const ex = getEx(exId); if (!ex) return;
+  const h = logOf(exId, getActive()?.id);
+  const top = sheet.scrollTop;
+  openSheet(`<h3 style="margin-bottom:6px">${esc(ex.name)}</h3>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"><span class="chip">${esc(gName(ex.groupId))}</span><span class="chip gym">${esc(gymName(ex.gym))}</span></div>
+    ${h.length ? exStats(h) + chartCard(h) + `<h2 style="margin-top:16px">Recent</h2><div class="card" style="padding:4px 16px">${recentRows(h.slice(0, 6))}</div>
+      ${h.length > 6 ? `<button class="btn block" style="margin-top:12px" data-act="detail" data-x="${ex.id}">All ${h.length} sessions</button>` : ''}`
+      : '<div class="empty">No history yet — today is the first entry.</div>'}
+    ${h.length ? '<p class="explain" style="margin-top:12px;font-size:13px">* Adjusted as if it was your 1st exercise for the muscle, so days in different orders compare fairly.</p>' : ''}
+    <button class="btn primary block" style="margin-top:12px" data-act="close-sheet">Back to workout</button>`);
+  ui.sheetEx = exId;
+  if (keepScroll) sheet.scrollTop = top;
+}
 function renderDetail(id) {
   const ex = getEx(id);
   if (!ex) { ui.tab = 'exercises'; return renderExercises(); }
   const h = logOf(id);
-  const best = h.length ? Math.max(...h.map(freshEq)) : 0;
-  const rows = h.map(x => `<div class="hrow">
-      <div class="l1"><span>${fmtDate(x.date, true)}</span><span class="ord">${x.known ? ord(x.slot) : '–'}</span></div>
-      <div class="l2 num">${esc(setsText(x.en.sets))}</div>
-      ${x.en.note ? `<div class="l3">${esc(x.en.note)}</div>` : ''}</div>`).join('');
+  const rows = recentRows(h);
   return `<button class="back" data-act="back">${ICON.back} ${ui.detailFrom === 'train' ? 'Workout' : 'Progress'}</button>
     <h1>${esc(ex.name)}</h1>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px"><span class="chip">${esc(gName(ex.groupId))}</span><span class="chip gym">${esc(gymName(ex.gym))}</span>
       <button class="chip chip-btn" data-act="edit-ex" data-x="${ex.id}">Edit</button></div>
     ${ex.notes ? `<p class="sub" style="margin:8px 0 0">📌 ${esc(ex.notes)}</p>` : ''}
-    <div class="stats">
-      <div class="stat"><div class="k">Sessions</div><div class="v num">${h.length}</div></div>
-      <div class="stat"><div class="k">Last top set</div><div class="v num">${h.length ? `${fmt(num(h[0].top.w))}<small>×${h[0].top.r}</small>` : '–'}</div></div>
-      <div class="stat"><div class="k">Best 1RM*</div><div class="v num">${best ? Math.round(best) + '<small> kg</small>' : '–'}</div></div>
-    </div>
-    <div class="card chart-card">
-      <div class="ct">Strength trend</div>
-      <div class="cs">Estimated 1RM, adjusted as if done first. Tap a point for that day — the number is the exercise order (? = not noted).</div>
-      ${chartSVG(h)}
-    </div>
+    <div style="height:12px"></div>
+    ${exStats(h)}
+    ${h.length ? chartCard(h) : ''}
     <h2>Log</h2>
     <div class="card" style="padding:4px 16px">${rows || '<div class="empty">No sessions yet.</div>'}</div>
     <p class="explain" style="margin-top:14px">* Order-adjusted: a set done as your 2nd or 3rd exercise is scaled up by how much weaker you typically are in that slot, so days are comparable.</p>`;
@@ -697,6 +761,7 @@ function renderDetail(id) {
 /* ============ sheet ============ */
 const sheetWrap = $('#sheet'), sheet = $('.sheet');
 function openSheet(html) {
+  ui.sheetEx = null;
   sheet.innerHTML = '<div class="grab"></div>' + html;
   if (!ui.sheetOpen) { if (!ui.reuseEntry) history.pushState({sheet: 1}, ''); ui.sheetOpen = true; }
   sheetWrap.hidden = false;
@@ -717,7 +782,7 @@ function sheetToPage() { ui.sheetOpen = false; sheetWrap.hidden = true; sheet.in
 window.addEventListener('popstate', () => {
   if (skipPops > 0) { skipPops--; return; }
   if (ui.sheetOpen) { closeSheet(true); return; }
-  if (ui.tab === 'detail') { ui.tab = ui.detailFrom || 'exercises'; ui.sel = null; render(); }
+  if (ui.tab === 'detail') { ui.tab = ui.detailFrom || 'exercises'; ui.sel = null; render(); window.scrollTo(0, ui.returnY || 0); }
 });
 function confirmSheet(title, body, okLabel, onOk) {
   openSheet(`<h3>${esc(title)}</h3><p class="explain">${body}</p>
@@ -988,10 +1053,11 @@ document.addEventListener('click', ev => {
     case 'exgroup': ui.exGroup = el.dataset.g; render(); break;
     case 'detail':
       if (ui.sheetOpen) sheetToPage(); else history.pushState({page: 'detail'}, '');
-      if (ui.tab !== 'detail') ui.detailFrom = ui.tab;
+      if (ui.tab !== 'detail') { ui.detailFrom = ui.tab; ui.returnY = window.scrollY; }
       ui.detail = el.dataset.x; ui.sel = null; ui.tab = 'detail'; render(); window.scrollTo(0, 0); break;
     case 'back': history.back(); break;
-    case 'pt': ui.sel = +el.dataset.i; render(); break;
+    case 'pt': ui.sel = +el.dataset.i; if (ui.sheetOpen && ui.sheetEx) historySheet(ui.sheetEx, true); else render(); break;
+    case 'ex-hist': ui.sel = null; historySheet(el.dataset.x); break;
     case 'new-ex': exerciseForm(null, el.dataset.from); break;
     case 'edit-ex': exerciseForm(getEx(el.dataset.x)); break;
     case 'del-ex': {
