@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-<meta name="theme-color" content="#0c0d0f">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0c0d0f">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f4f1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
@@ -13,7 +14,7 @@
 <style>
 :root{
   --bg:#0c0d0f; --surface:#15171b; --surface-2:#1d2025; --surface-3:#262a31; --line:#2b3038;
-  --text:#f2f4f7; --text-2:#a7adb8; --muted:#6c7380;
+  --text:#f2f4f7; --text-2:#a7adb8; --muted:#868d99;
   --accent:#c6f05f; --accent-ink:#11140a; --accent-soft:rgba(198,240,95,.12);
   --good:#5ee08f; --warn:#f6c453; --danger:#ff7a7a; --danger-soft:rgba(255,122,122,.12);
   --radius:18px; --radius-sm:12px;
@@ -23,7 +24,7 @@
 @media (prefers-color-scheme: light){
   :root:not([data-theme="dark"]){
     --bg:#f3f4f1; --surface:#ffffff; --surface-2:#f1f2ee; --surface-3:#e6e8e2; --line:#dcdfd6;
-    --text:#14161a; --text-2:#4f5560; --muted:#7c838e;
+    --text:#14161a; --text-2:#4f5560; --muted:#686f7a;
     --accent:#4f7a00; --accent-ink:#ffffff; --accent-soft:rgba(79,122,0,.10);
     --good:#16803c; --warn:#a86b00; --danger:#c53030; --danger-soft:rgba(197,48,48,.08);
     --shadow:0 10px 30px rgba(20,22,26,.10);
@@ -48,7 +49,8 @@ button{cursor:pointer;border:0;background:none;padding:0}
 .icon-btn svg{width:22px;height:22px}
 main{padding:4px 16px 24px;max-width:640px;margin:0 auto}
 body.resting main{padding-bottom:84px}
-.chip-btn{height:40px;padding:0 16px;font-size:13px}
+.chip-btn{background:var(--surface-3);color:var(--text)}
+.chip svg{width:13px;height:13px}
 h1{font-size:28px;letter-spacing:-.03em;margin:8px 0 4px;line-height:1.1}
 h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:26px 0 10px;font-weight:700}
 h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
@@ -131,6 +133,7 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 /* history */
 .hcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;width:100%;text-align:left;display:block}
 .hcard .top-line{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.hcard .top-line .chip{white-space:normal;text-align:right;min-width:0}
 .hcard .date{font-weight:800;font-size:17px}
 .hcard ol{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
 .hcard li{display:grid;grid-template-columns:24px 1fr;gap:8px;font-size:14px}
@@ -188,12 +191,12 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 
 /* rest pill */
 .rest{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom));z-index:35;
-  display:flex;align-items:center;gap:6px;padding:6px 6px 6px 16px;border-radius:999px;background:var(--text);color:var(--bg);
+  display:flex;align-items:center;gap:6px;padding:6px 6px 6px 16px;border-radius:999px;background:var(--surface-3);color:var(--text);border:1px solid var(--line);
   box-shadow:var(--shadow);font-weight:800;white-space:nowrap}
 .rest .tm{font-size:20px;min-width:62px;font-variant-numeric:tabular-nums}
 .rest .lbl{font-size:12px;opacity:.6;margin-right:4px}
-.rest button{height:40px;min-width:46px;padding:0 10px;border-radius:999px;background:color-mix(in srgb,var(--bg) 12%,transparent);font-weight:800;font-size:13px}
-.rest.go{background:var(--accent);color:var(--accent-ink)}
+.rest button{height:40px;min-width:46px;padding:0 10px;border-radius:999px;background:color-mix(in srgb,var(--text) 10%,transparent);font-weight:800;font-size:13px}
+.rest.go{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .rest[hidden]{display:none}
 
 /* sheet */
@@ -221,12 +224,12 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .explain{color:var(--text-2);font-size:14px}
 .pr-list{display:flex;flex-direction:column;gap:8px;margin:12px 0}
 .big-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 4px}
-.toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translate(-50%,calc(-100% - 24px - env(safe-area-inset-top)));visibility:hidden;z-index:60;background:var(--text);color:var(--bg);
+.toast{position:fixed;left:50%;width:max-content;top:calc(14px + env(safe-area-inset-top));transform:translate(-50%,calc(-100% - 24px - env(safe-area-inset-top)));visibility:hidden;z-index:60;background:var(--text);color:var(--bg);
   padding:10px 16px;border-radius:12px;font-weight:700;font-size:14px;transition:transform .25s,visibility .25s;box-shadow:var(--shadow);max-width:90vw}
 .toast.show{transform:translate(-50%,0);visibility:visible}
 .gymseg{display:grid;grid-template-columns:repeat(4,1fr);margin:12px 0 2px}
-.seg.gymseg button{min-width:0;padding:0 4px;font-size:13px;height:44px}
-.modeseg{display:grid;grid-template-columns:1fr 1fr;margin:4px 0 8px}
+.seg.gymseg button{min-width:0;padding:0 3px;font-size:13px;height:44px;overflow-wrap:anywhere;line-height:1.1}
+.modeseg{display:grid;grid-template-columns:1fr 1fr;margin:4px 0 16px}
 .seg.modeseg button{height:38px}
 .ph-card{padding:14px}
 .ph-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
@@ -237,6 +240,9 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .chkline{display:flex;gap:10px;align-items:center;margin:2px 0 14px;color:var(--text-2);font-size:14px}
 .chkline input{width:22px;height:22px;accent-color:var(--accent);flex:none}
 .trip{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.gymseg.five{grid-template-columns:.7fr 1fr 1.3fr 1fr 1fr;margin:8px 0 10px}
+.restseg{display:grid;grid-template-columns:repeat(7,1fr)}
+.seg.restseg button{padding:0;min-width:0}
 .pick-sec{margin:14px 0 6px;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 @keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
 @keyframes fade{from{opacity:0}}
@@ -341,6 +347,7 @@ function save() {
   catch (e) { toast('Could not save — storage blocked or full'); }
 }
 
+let toastT;
 let dataV = 0;   // bumped on every save, so cached lookups know when to refresh
 const GYM_IDS = GYMS.map(g => g[0]);
 // gyms used to be free text ("Brønderslev", "Manna", …): turn them into gym ids
@@ -360,6 +367,13 @@ function migrateGyms(d) {
 let db = load();
 migrateGyms(db);
 db.physio ||= {programs: [], active: null};
+// v3.2: clearer wording for extra sets noted in Keep
+if (!db.physioFix2) {
+  let n = 0;
+  for (const p of db.physio.programs) for (const it of p.items) for (const e of it.log) if (e.note?.startsWith('other sets: ')) { e.note = 'Also: ' + e.note.slice(12); n++; }
+  db.physioFix2 = true;
+  if (n) save();
+}
 // v3.1: the normal leg press is done before the feet-high one, not replaced by it
 if (!db.physioFix1) {
   for (const p of db.physio.programs) {
@@ -614,7 +628,7 @@ function exerciseCard(s, en) {
   return `
   <article class="ex-card" id="card-${en.id}">
     <div class="ex-head">
-      <div class="pos num">${en.pos || '·'}</div>
+      <div class="pos num">${en.pos || '?'}</div>
       <div class="ex-title">
         <h3>${esc(ex.name)}</h3>
         <div class="row">${ex.gym && ex.gym !== s.gym ? `<span class="chip gym">${esc(gymName(ex.gym))}</span>` : ''}<span class="slot">${known(en) ? `${ord(k)} ${esc(gName(ex.groupId).toLowerCase())} exercise` : 'order not noted'}</span></div>
@@ -636,7 +650,7 @@ function exerciseCard(s, en) {
 function sessionCard(s) {
   const items = s.entries.slice().sort((a, b) => (a.pos || 0) - (b.pos || 0)).map(en => {
     const ex = getEx(en.exId);
-    return `<li><span class="n num">${en.pos || '·'}</span><span><b>${esc(ex?.name || 'Deleted')}</b>${en.pr ? '<span class="badge-pr">PR</span>' : ''}<br><span class="sets-t num">${esc(setsText(en.sets))}</span></span></li>`;
+    return `<li><span class="n num">${en.pos || '?'}</span><span><b>${esc(ex?.name || 'Deleted')}</b>${en.pr ? '<span class="badge-pr">PR</span>' : ''}<br><span class="sets-t num">${esc(setsText(en.sets))}</span></span></li>`;
   }).join('');
   const groups = s.groups.length ? s.groups : [...new Set(s.entries.map(en => getEx(en.exId)?.groupId).filter(Boolean))];
   return `<button class="hcard" data-act="session" data-s="${s.id}">
@@ -644,7 +658,7 @@ function sessionCard(s) {
     <ol>${items}</ol></button>`;
 }
 function gymChips() {
-  return `<div class="scroller" style="margin-bottom:4px">${[['all', 'All gyms'], ...GYMS].map(([id, n]) => `<button class="fchip" data-act="viewgym" data-g="${id}" aria-pressed="${ui.viewGym === id}">${n}</button>`).join('')}</div>`;
+  return `<div class="seg gymseg five" role="group" aria-label="Gym filter">${[['all', 'All'], ...GYMS].map(([id, n]) => `<button data-act="viewgym" data-g="${id}" aria-pressed="${ui.viewGym === id}">${n}</button>`).join('')}</div>`;
 }
 function renderHistory() {
   const list = db.sessions.filter(s => s.done && (ui.viewGym === 'all' || s.gym === ui.viewGym)).sort((a, b) => b.date.localeCompare(a.date));
@@ -746,7 +760,7 @@ function exStats(h) {
 }
 function recentRows(h) {
   return h.map(x => `<div class="hrow">
-      <div class="l1"><span>${fmtDate(x.date, true)}${x.en.pr ? '<span class="badge-pr">PR</span>' : ''}</span><span class="ord">${x.known ? ord(x.slot) : '–'}</span></div>
+      <div class="l1"><span>${fmtDate(x.date, true)}${x.en.pr ? '<span class="badge-pr">PR</span>' : ''}</span><span class="ord">${x.known ? ord(x.slot) : '?'}</span></div>
       <div class="l2 num">${esc(setsText(x.en.sets))}</div>
       ${x.en.note ? `<div class="l3">${esc(x.en.note)}</div>` : ''}</div>`).join('');
 }
@@ -778,7 +792,7 @@ function renderDetail(id) {
   return `<button class="back" data-act="back">${ICON.back} ${ui.detailFrom === 'train' ? 'Workout' : 'Progress'}</button>
     <h1>${esc(ex.name)}</h1>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px"><span class="chip">${esc(gName(ex.groupId))}</span><span class="chip gym">${esc(gymName(ex.gym))}</span>
-      <button class="chip chip-btn" data-act="edit-ex" data-x="${ex.id}">Edit</button></div>
+      <button class="chip chip-btn" data-act="edit-ex" data-x="${ex.id}">${ICON.edit} Edit</button></div>
     ${ex.notes ? `<p class="sub" style="margin:8px 0 0">📌 ${esc(ex.notes)}</p>` : ''}
     <div style="height:12px"></div>
     ${exStats(h)}
@@ -966,7 +980,7 @@ function phEditForm(id, pid) {
       <label class="field"><span>Name</span><input name="name" required value="${v('name', '')}"></label>
       <label class="field"><span>Gym</span><select name="gym">${[['', 'Any gym'], ...GYMS].map(([g, n]) => `<option value="${g}" ${(it ? it.gym || '' : '') === g ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       <label class="field"><span>Measured in</span><select name="unit"><option value="reps" ${it?.unit !== 'sec' ? 'selected' : ''}>Reps</option><option value="sec" ${it?.unit === 'sec' ? 'selected' : ''}>Seconds (holds)</option></select></label>
-      <div class="field"><span>Progression rule</span><div class="trip">
+      <div class="field"><span>Progression rule</span><div class="trip" style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:4px"><div>From</div><div>To</div><div>Then + kg</div></div><div class="trip">
         <input name="lo" inputmode="numeric" aria-label="From" placeholder="from" value="${v('lo', 8)}">
         <input name="hi" inputmode="numeric" aria-label="To" placeholder="to" value="${v('hi', 12)}">
         <input name="step" inputmode="decimal" aria-label="Then add kg" placeholder="+kg" value="${v('step', 2)}"></div>
@@ -1094,7 +1108,7 @@ function settingsSheet() {
   const rows = [1, 2, 3, 4, 5].map(k => `<tr><td>${k === 5 ? '5th+' : ord(k)}</td><td class="num"><b>${Math.round(factors[k].f * 100)}%</b></td><td class="num" style="color:var(--muted)">${k === 1 ? 'baseline' : factors[k].n ? `from ${factors[k].n} comparison${factors[k].n > 1 ? 's' : ''}` : 'starting guess'}</td></tr>`).join('');
   const restOpts = [60, 90, 120, 150, 180, 240].map(v => `<button data-act="set-rest" data-v="${v}" aria-pressed="${db.settings.rest === v}">${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}</button>`).join('');
   openSheet(`<h3>Settings</h3>
-    <div class="field"><span>Rest timer</span><div class="seg">${restOpts}<button data-act="set-rest" data-v="0" aria-pressed="${!db.settings.rest}">Off</button></div></div>
+    <div class="field"><span>Rest timer</span><div class="seg restseg">${restOpts}<button data-act="set-rest" data-v="0" aria-pressed="${!db.settings.rest}">Off</button></div></div>
     <div class="field" style="margin-top:18px"><span>How strong you are by exercise order</span>
       <p class="explain" style="margin:0">Your strength on the Nth exercise for a muscle, compared with doing it first. Learned from your own log — it gets more personal as you train in different orders.</p>
       <table class="ftable"><thead><tr><th>Order</th><th>Strength</th><th>Based on</th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -1102,14 +1116,14 @@ function settingsSheet() {
       <p class="explain" style="margin:0 0 8px">Everything lives only on this phone. Export a backup now and then (e.g. to Google Drive).</p>
       <div style="display:flex;gap:8px"><button class="btn block" data-act="export">Export</button><button class="btn block" data-act="import">Import</button></div></div>
     <div style="margin-top:18px"><button class="btn danger block" data-act="reset">Erase all data</button></div>
-    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v3.1 · works offline</p>`);
+    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v3.2 · works offline</p>`);
 }
 
 function sessionSheet(s) {
   openSheet(`<h3>${fmtDate(s.date, true)}</h3>
     <div class="list">${s.entries.slice().sort((a, b) => (a.pos || 0) - (b.pos || 0)).map(en => {
       const ex = getEx(en.exId);
-      return `<div class="row-item" style="align-items:flex-start"><span class="pos num" style="width:30px;height:30px;font-size:15px;border-radius:9px">${en.pos || '·'}</span>
+      return `<div class="row-item" style="align-items:flex-start"><span class="pos num" style="width:30px;height:30px;font-size:15px;border-radius:9px">${en.pos || '?'}</span>
         <div class="grow"><div class="t">${esc(ex?.name || 'Deleted')}</div><div class="s num">${esc(setsText(en.sets))}</div>${en.note ? `<div class="s" style="font-style:italic">${esc(en.note)}</div>` : ''}</div></div>`;
     }).join('')}</div>
     <div style="display:flex;gap:8px;margin-top:16px">
@@ -1222,7 +1236,6 @@ setInterval(() => {
 }, 1000);
 
 /* ============ toast ============ */
-let toastT;
 function toast(msg) { const t = $('#toast'); t.onclick = null; t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2200); }
 
 /* ============ events ============ */
