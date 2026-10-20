@@ -60,6 +60,7 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:52px;padding:0 20px;border-radius:16px;
   font-weight:700;background:var(--surface-2);color:var(--text);transition:transform .08s}
 .btn:active{transform:scale(.98)}
+.btn svg{width:20px;height:20px;flex:none}
 .btn.primary{background:var(--accent);color:var(--accent-ink)}
 .btn.primary:disabled{opacity:.35}
 .btn.danger{background:var(--danger-soft);color:var(--danger)}
@@ -220,9 +221,9 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .explain{color:var(--text-2);font-size:14px}
 .pr-list{display:flex;flex-direction:column;gap:8px;margin:12px 0}
 .big-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 4px}
-.toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translate(-50%,-150%);z-index:60;background:var(--text);color:var(--bg);
-  padding:10px 16px;border-radius:12px;font-weight:700;font-size:14px;transition:transform .25s;box-shadow:var(--shadow);max-width:90vw}
-.toast.show{transform:translate(-50%,0)}
+.toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translate(-50%,calc(-100% - 24px - env(safe-area-inset-top)));visibility:hidden;z-index:60;background:var(--text);color:var(--bg);
+  padding:10px 16px;border-radius:12px;font-weight:700;font-size:14px;transition:transform .25s,visibility .25s;box-shadow:var(--shadow);max-width:90vw}
+.toast.show{transform:translate(-50%,0);visibility:visible}
 .gymseg{display:grid;grid-template-columns:repeat(4,1fr);margin:12px 0 2px}
 .seg.gymseg button{min-width:0;padding:0 4px;font-size:13px;height:44px}
 .modeseg{display:grid;grid-template-columns:1fr 1fr;margin:4px 0 8px}
@@ -359,6 +360,17 @@ function migrateGyms(d) {
 let db = load();
 migrateGyms(db);
 db.physio ||= {programs: [], active: null};
+// v3.1: the normal leg press is done before the feet-high one, not replaced by it
+if (!db.physioFix1) {
+  for (const p of db.physio.programs) {
+    if (p.id === 'nicklas-legs' && !String(p.note || '').trim()) p.note = 'Remember the angle of the shoulders and back.';
+    for (const it of p.items) {
+      if (/^leg-press-(aal|br)-1$/.test(it.id)) { it.retired = false; if (it.name === 'Leg press (v1)') it.name = 'Leg press'; }
+      if (/^leg-press-(aal|br)-2$/.test(it.id) && it.notes === 'Version 2: feet higher on the plate') it.notes = 'Feet higher on the plate — done after the normal leg press';
+    }
+  }
+  db.physioFix1 = true;
+}
 let factors = {};
 const ui = {tab: 'train', pick: new Set(), exGroup: 'all', exQuery: '', detail: null, sel: null, sheetOpen: false,
             viewGym: db.settings.gym, histLimit: 40};
@@ -1089,7 +1101,7 @@ function settingsSheet() {
       <p class="explain" style="margin:0 0 8px">Everything lives only on this phone. Export a backup now and then (e.g. to Google Drive).</p>
       <div style="display:flex;gap:8px"><button class="btn block" data-act="export">Export</button><button class="btn block" data-act="import">Import</button></div></div>
     <div style="margin-top:18px"><button class="btn danger block" data-act="reset">Erase all data</button></div>
-    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v3 · works offline</p>`);
+    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v3.1 · works offline</p>`);
 }
 
 function sessionSheet(s) {
