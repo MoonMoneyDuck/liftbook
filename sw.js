@@ -13,12 +13,14 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  // the page itself: a real page load, or the app asking for './' to check for a new version
+  const isPage = req.mode === 'navigate' || /\/(index\.html)?$/.test(new URL(req.url).pathname);
   const fresh = caches.open(CACHE).then(async cache => {
     try {
       // a page-load request can't be re-issued with options (Chrome throws), so fetch its URL instead
       const res = await fetch(req.mode === 'navigate' ? req.url : req, {cache: 'no-cache'});
       if (res.ok && !res.redirected) {   // a cached redirect would break that URL for good
-        const old = req.mode === 'navigate' ? await cache.match(req, {ignoreSearch: true}) : null;
+        const old = isPage ? await cache.match(req, {ignoreSearch: true}) : null;
         const changed = old && (await old.text()) !== (await res.clone().text());
         await cache.put(req, res.clone());
         if (changed) (await self.clients.matchAll({type: 'window'})).forEach(c => c.postMessage('updated'));

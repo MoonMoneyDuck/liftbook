@@ -1184,7 +1184,7 @@ function settingsSheet() {
       <p class="explain" style="margin:0 0 8px">Everything lives only on this phone. Export a backup now and then (e.g. to Google Drive).</p>
       <div style="display:flex;gap:8px"><button class="btn block" data-act="export">Export</button><button class="btn block" data-act="import">Import</button></div></div>
     <div style="margin-top:18px"><button class="btn danger block" data-act="reset">Erase all data</button></div>
-    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v3.3 · works offline</p>`);
+    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v3.4 · works offline</p>`);
 }
 
 function sessionSheet(s) {
@@ -1513,7 +1513,13 @@ document.addEventListener('submit', ev => {
     else { closeSheet(); render(); toast('Exercise created'); }
   }
 });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { renderRest(); tickClock(); } });
+// the phone keeps the app alive instead of reloading it, so look for a new version whenever it comes back
+let lastCheck = Date.now();
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  renderRest(); tickClock();
+  if (Date.now() - lastCheck > 60000 && navigator.serviceWorker?.controller) { lastCheck = Date.now(); fetch('./', {cache: 'no-cache'}).catch(() => {}); }
+});
 
 /* ============ boot ============ */
 computeFactors(); recomputePRs();
