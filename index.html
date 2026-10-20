@@ -370,6 +370,7 @@ if (!db.physioFix1) {
     }
   }
   db.physioFix1 = true;
+  if (db.physio.programs.length) save();
 }
 let factors = {};
 const ui = {tab: 'train', pick: new Set(), exGroup: 'all', exQuery: '', detail: null, sel: null, sheetOpen: false,
