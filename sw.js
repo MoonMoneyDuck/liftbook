@@ -1,6 +1,6 @@
 // Offline support: open instantly from the phone's cache, fetch the newest version in the background,
 // and tell the page when a new version has arrived so it can offer a reload.
-const CACHE = 'liftbook-v3';
+const CACHE = 'liftbook-v4';
 const FILES = ['./', 'index.html', 'keep-seed.json', 'physio-seed.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
@@ -14,7 +14,8 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   const fresh = caches.open(CACHE).then(async cache => {
     try {
-      const res = await fetch(req, {cache: 'no-cache'});
+      // a page-load request can't be re-issued with options (Chrome throws), so fetch its URL instead
+      const res = await fetch(req.mode === 'navigate' ? req.url : req, {cache: 'no-cache'});
       if (res.ok) {
         const old = req.mode === 'navigate' ? await cache.match(req, {ignoreSearch: true}) : null;
         const changed = old && (await old.text()) !== (await res.clone().text());
