@@ -8,7 +8,7 @@ Offline gym log (PWA) that tracks the **order** you do exercises in. Replaces th
 
 ## Files
 - `index.html` — the whole app (CSS + JS inline).
-- `sw.js` — offline cache; serves the cached app, fetches the newest version in the background and shows "New version ready".
+- `sw.js` — offline cache; serves the cached app, fetches the newest version in the background (on page load, and when the app comes back to the screen) and shows "New version ready". Whenever `sw.js` itself changes, also bump `CACHE` (liftbook-vN), or the new worker's install can overwrite the page before the old one notices the change.
 - `manifest.webmanifest`, `icon*.png`, `icon.svg` — install metadata and icons.
 
 ## Order model

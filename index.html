@@ -252,6 +252,7 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .rep .spark{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
 .rep .end{fill:var(--accent)}
 .rep .base{stroke:var(--line);stroke-width:1}
+.rep .mark{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 2}
 .rep .d{color:var(--muted);font-size:11px}
 .rep .gain{color:var(--good);font-weight:700}
 .two-btn{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:12px}
@@ -797,51 +798,63 @@ function historySheet(exId, keepScroll) {
   if (keepScroll) sheet.scrollTop = top;
 }
 // one page to show the physio: every current exercise with start → now and a mini chart
+const RESET = /harder|hårder|new version|now as|now with|replaces/i;
+const phSeries = it => it.log.filter(e => (e.v != null || e.w > 0) && (e.u || it.unit) === it.unit);
+const phY = log => { const byW = log.some(e => e.w > 0); return e => byW ? (num(e.w) || 0) : (num(e.v) || 0); };
+// "made harder" only restarts the count where the numbers actually dropped back
+const isReset = (log, i, y = phY(log)) => i > 0 && RESET.test(log[i].note || '') && y(log[i]) < y(log[i - 1]);
+const phStage = log => { let k = 0; log.forEach((e, i) => { if (isReset(log, i)) k = i; }); return k; };
 function phSpark(it) {
-  const log = it.log.filter(e => e.v != null || e.w > 0); if (log.length < 2) return '';
+  const log = phSeries(it); if (log.length < 2) return '';
   const byW = log.some(e => e.w > 0), y = e => byW ? (num(e.w) || 0) : (num(e.v) || 0);
   const W = 140, H = 40, P = 3, ys = log.map(y);
   const y0 = Math.min(...ys), y1 = Math.max(...ys), span = y1 - y0 || 1;
   const pts = log.map((e, i) => [P + i * (W - 2 * P) / (log.length - 1), H - P - (y(e) - y0) / span * (H - 2 * P)]);
   const [ex, ey] = pts[pts.length - 1];
-  return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true"><line class="base" x1="${P}" x2="${W - P}" y1="${H - P}" y2="${H - P}"/>
+  const marks = log.map((e, i) => isReset(log, i) ? `<line class="mark" x1="${pts[i][0]}" x2="${pts[i][0]}" y1="${P}" y2="${H - P}"/>` : '').join('');
+  return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true"><line class="base" x1="${P}" x2="${W - P}" y1="${H - P}" y2="${H - P}"/>${marks}
     <polyline class="spark" points="${pts.map(q => q.map(v => v.toFixed(1)).join(',')).join(' ')}"/><circle class="end" cx="${ex}" cy="${ey}" r="3.5"/></svg>`;
 }
 function renderPhysioReport(pid) {
   const p = phProg(pid), g = db.settings.gym;
   if (!p) { ui.tab = 'train'; return renderPhysioStart(); }
   const items = p.items.filter(it => phHere(it, g) && it.log.length);
-  let steps = 0, sessions = 0;
+  let steps = 0, longest = 0;
   const dates = [];
   for (const it of items) {
-    sessions = Math.max(sessions, phLast(it).n);
+    longest = Math.max(longest, it.log.length);
     let top = num(it.log[0].w) || 0;   // count new heaviest weights, not going back up after a lighter day
     for (const e of it.log.slice(1)) if ((num(e.w) || 0) > top) { top = num(e.w); steps++; }
     for (const e of it.log) if (e.date) dates.push(e.date);
   }
   dates.sort();
+  // what improved from the first to the latest entry: more weight, or the same weight for more reps/seconds
+  const gainOf = (a, b) => {
+    const wa = num(a.w) || 0, wb = num(b.w) || 0;
+    if (wb > wa) return `+${fmt(wb - wa)} kg`;
+    if (wb === wa && a.u === b.u && num(b.v) > num(a.v)) return `+${fmt(num(b.v) - num(a.v))} ${b.u === 'sec' ? 's' : 'reps'}`;
+    return '';
+  };
   const cards = items.map(it => {
-    const first = it.log[0], L = phLast(it), byW = it.log.some(e => e.w > 0);
-    const startW = it.log.find(e => e.w > 0);
-    const gain = byW ? (num(L.w) || 0) - (num(first.w) || 0) : (num(L.v) || 0) - (num(first.v) || 0);
-    const unit = byW ? 'kg' : it.unit === 'sec' ? 's' : 'reps';
+    const ser = phSeries(it), k = phStage(ser), first = ser[k] || it.log[0], L = ser[ser.length - 1] || phLast(it), gain = gainOf(first, L);
+    const stage = k ? ` <span style="color:var(--muted)">(#${first.n}, ${esc(first.note.split(' · ')[0].toLowerCase())})</span>` : '';
     return `<button class="rep" data-act="ph-hist" data-x="${it.id}">
       <div class="t">${esc(it.name)}</div>
       <div class="now num">${esc(phText(L, true)) || '–'}</div>
-      <div class="from num">from ${esc(phText(first, true)) || '–'}${byW && !(first.w > 0) && startW ? ` · first weight ${fmt(startW.w)} kg` : ''}</div>
+      <div class="from num">start: ${esc(phText(first, true)) || '–'}${stage}</div>
       ${phSpark(it)}
-      <div class="d num">${gain > 0 ? `<span class="gain">+${fmt(gain)} ${unit}</span> · ` : ''}${it.log.length} sessions</div></button>`;
+      <div class="d num">${gain ? `<span class="gain">${esc(gain)}</span> · ` : ''}${it.log.length} sessions</div></button>`;
   }).join('');
   return `<button class="back" data-act="back">${ICON.back} ${ui.detailFrom === 'exercises' ? 'Progress' : 'Physio'}</button>
     <h1>${esc(p.name)} — progress</h1>
-    <p class="sub" style="margin-bottom:10px">${p.by ? 'Program from ' + esc(p.by) + ' · ' : ''}${esc(gymName(g))}${dates.length ? ` · logged in Liftbook since ${fmtDate(dates[0])}` : ''}</p>
+    <p class="sub" style="margin-bottom:10px">${p.by ? 'Program from ' + esc(p.by) + ' · ' : ''}exercises for ${esc(gymName(g))}</p>
     <div class="stats" style="margin-top:0">
       <div class="stat"><div class="k">Exercises</div><div class="v num">${items.length}</div></div>
-      <div class="stat"><div class="k">Sessions</div><div class="v num">${sessions}</div><div class="d">most on one exercise</div></div>
+      <div class="stat"><div class="k">Sessions</div><div class="v num">${longest}</div><div class="d">on the longest-running exercise</div></div>
       <div class="stat"><div class="k">Weight ups</div><div class="v num">${steps}</div><div class="d">new heaviest weight</div></div>
     </div>
     <div class="rep-grid">${cards || '<div class="empty">Nothing logged yet.</div>'}</div>
-    <p class="explain" style="margin-top:12px;font-size:13px">Each line is one exercise across all its sessions (weight, or seconds/reps for exercises without weight). Tap one for the full log. Old versions of an exercise are left out.</p>`;
+    <p class="explain" style="margin-top:12px;font-size:13px">"Start" is the first entry for each exercise — mostly from the old Google Keep notes, which have no dates${dates.length ? `; sessions logged in Liftbook have dates, the first on ${fmtDate(dates[0])}` : ''}. The line shows weight per session (seconds or reps for exercises without weight); a dashed mark is where the exercise was made harder or changed, and "start" then counts from there. Tap an exercise for its full log. Old versions of an exercise are left out.</p>`;
 }
 function renderDetail(id) {
   if (String(id).startsWith('ph:')) return renderPhysioReport(id.slice(3));
@@ -1067,7 +1080,7 @@ function renderPhysioHistory() {
     <div class="list">${list.map(x => `<div class="hcard"><div class="top-line"><span class="date">${fmtDate(x.date, true)} <small style="color:var(--muted);font-weight:600">· ${esc(gymName(x.gym))}</small></span>
         <span style="display:flex;gap:4px;align-items:center"><span class="chip">${esc(x.p.name)}</span><button class="icon-btn" style="width:32px;height:32px" data-act="ph-sdel" data-s="${x.sid}" aria-label="Delete session">${ICON.trash}</button></span></div>
       <ol>${x.rows.map((r, i) => `<li><span class="n num">${i + 1}</span><span><b>${esc(r.it.name)}</b><br><span class="sets-t num">#${r.e.n} · ${esc(phText(r.e))}</span></span></li>`).join('')}</ol></div>`).join('')
-      || '<div class="empty">No physio sessions logged in the app yet.</div>'}</div>`;
+      || `<div class="empty">No physio sessions at ${esc(gymName(db.settings.gym))} logged in the app yet.</div>`}</div>`;
 }
 function renderPhysioProgress() {
   const row = it => { const L = phLast(it); return `<button class="row-item" data-act="ph-hist" data-x="${it.id}">
@@ -1184,7 +1197,7 @@ function settingsSheet() {
       <p class="explain" style="margin:0 0 8px">Everything lives only on this phone. Export a backup now and then (e.g. to Google Drive).</p>
       <div style="display:flex;gap:8px"><button class="btn block" data-act="export">Export</button><button class="btn block" data-act="import">Import</button></div></div>
     <div style="margin-top:18px"><button class="btn danger block" data-act="reset">Erase all data</button></div>
-    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v3.4 · works offline</p>`);
+    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v3.5 · works offline</p>`);
 }
 
 function sessionSheet(s) {
