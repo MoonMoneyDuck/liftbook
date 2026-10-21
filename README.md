@@ -35,3 +35,6 @@ Aalborg (Gym & Fitness), Brønderslev, Klarup, Other (Manna, Hals, FW…). Chose
 - The notes are numbered sessions without dates ("12. 22×8"). Timed holds are kg × seconds. Each exercise has a rule: from–to reps/seconds, then +kg. The app suggests one step on (+1 rep / +5 s, or +kg at the top of the range).
 - Gym-specific versions (leg press, calf hold, last exercise) show only at their gym. Old versions are hidden from sessions but keep their history.
 - Imported once (`db.physioV1`).
+- v4 (21 Oct 2026): each physio set is its own row (kg × reps/seconds, + Add set / − Set). A log entry keeps the best set as `w`/`v` (heaviest set that reached the bottom of the range), `sets` = count, and `list` = every set when they differed. Old active sessions (one row + a sets count) are converted by `phRows`.
+- "Shoulder press (bottom part)" (Aalborg, Gym80, 8–12 then +5 kg) was added by `addPhysioPress()` (`db.physioPress`), with the 10 "only at the bottom" sessions from Keep (20 Sep – 18 Oct 2026). Those sessions are still in the gym log under Gym80 Shoulder Press Machine too.
+- Search (exercise picker + Progress) matches every typed word and ignores spaces and dashes, so "pull down" finds "Pulldown".

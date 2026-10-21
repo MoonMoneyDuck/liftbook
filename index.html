@@ -235,7 +235,9 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .ph-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .ph-top .s{color:var(--text-2);font-size:13px;margin-top:2px}
 .ph-card .row-item{background:var(--surface-2);border-color:transparent;padding:10px 12px}
-.set-row.pset-row,.set-h.pset-h{grid-template-columns:1fr 14px 1fr 58px 48px}
+.set-row.pset-row,.set-h.pset-h{grid-template-columns:26px 1fr 14px 1fr 48px}
+.pset-btns{display:grid;grid-template-columns:1fr auto;gap:8px}
+.pset-btns .add-set:nth-child(2){padding:0 14px}
 .pset-h span{text-align:center}
 .chkline{display:flex;gap:10px;align-items:center;margin:2px 0 14px;color:var(--text-2);font-size:14px}
 .chkline input{width:22px;height:22px;accent-color:var(--accent);flex:none}
@@ -332,7 +334,10 @@ const fmtDate = (s, long) => { const d = dateObj(s); const o = {day:'numeric', m
 const daysAgo = s => Math.round((dateObj(today()) - dateObj(s)) / 864e5);
 const agoText = s => { const d = daysAgo(s); return d === 0 ? 'today' : d === 1 ? 'yesterday' : d < 60 ? `${d} days ago` : fmtDate(s); };
 const e1rm = (w, r) => (w > 0 && r > 0) ? w * (1 + Math.min(r, 15) / 30) : 0;   // Epley estimate
-const setsText = sets => sets.filter(s => s.done).map(s => `${fmt(num(s.w))}×${s.r}`).join(' · ');
+// search: every typed word must appear, ignoring spaces and dashes ("pull down" finds "Wide-Grip Pulldown")
+const flat = s => String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+const hits = (text, q) => q.split(/\s+/).map(flat).filter(Boolean).every(w => flat(text).includes(w));
+const setsText = sets =>sets.filter(s => s.done).map(s => `${fmt(num(s.w))}×${s.r}`).join(' · ');
 
 /* ============ storage ============ */
 function emptyDb() {
@@ -693,7 +698,7 @@ function exRows() {
   const q = ui.exQuery.trim().toLowerCase();
   const list = db.exercises
     .filter(e => (ui.exGroup === 'all' || e.groupId === ui.exGroup) && (ui.viewGym === 'all' || !e.gym || e.gym === ui.viewGym) &&
-                 (!q || (e.name + ' ' + gymName(e.gym)).toLowerCase().includes(q)))
+                 (!q || hits(e.name + ' ' + gymName(e.gym), q)))
     .sort(byRecent);
   const rows = list.map(e => { const last = lastDates()[e.id], top = lastTop(e.id); return `
     <button class="row-item" data-act="detail" data-x="${e.id}">
@@ -825,7 +830,7 @@ function renderPhysioReport(pid) {
     longest = Math.max(longest, it.log.length);
     let top = num(it.log[0].w) || 0;   // count new heaviest weights, not going back up after a lighter day
     for (const e of it.log.slice(1)) if ((num(e.w) || 0) > top) { top = num(e.w); steps++; }
-    for (const e of it.log) if (e.date) dates.push(e.date);
+    for (const e of it.log) if (e.sid) dates.push(e.date);
   }
   dates.sort();
   // what improved from the first to the latest entry: more weight, or the same weight for more reps/seconds
@@ -887,9 +892,14 @@ const phLast = it => it.log[it.log.length - 1];
 // "22 kg × 8 reps", "5 kg × 30 s", "60 s"
 function phText(e, short) {
   if (!e) return '';
+  if (e.list?.length > 1) {   // sets that differed: "55 kg × 12 · 10 · 8" or "22×8 · 20×10"
+    const s = e.u === 'sec' ? ' s' : '';
+    if (e.list.every(x => x.w === e.list[0].w)) return (e.list[0].w > 0 ? `${fmt(e.list[0].w)} kg × ` : '') + e.list.map(x => fmt(x.v)).join(' · ') + s;
+    return e.list.map(x => `${fmt(x.w)}×${fmt(x.v)}`).join(' · ') + s;
+  }
   const v = e.v == null ? '' : e.u === 'sec' ? `${fmt(e.v)} s` : short ? fmt(e.v) : `${fmt(e.v)} reps`;
   const w = e.w > 0 ? `${fmt(e.w)} kg` : e.u === 'sec' ? '' : 'no weight';
-  return [w, v].filter(Boolean).join(' × ') + (e.sets && !short ? ` · ${e.sets} sets` : '');
+  return [w, v].filter(Boolean).join(' × ') + (e.sets && !short ? ` · ${e.sets} set${e.sets === 1 ? '' : 's'}` : '');
 }
 function ruleText(it) {
   if (it.unit === 'sec') return it.lo && it.hi ? `${fmt(it.lo)}–${fmt(it.hi)} s, then +${fmt(it.step)} kg` : 'add 5 s each time';
@@ -904,6 +914,49 @@ function phNext(it) {
   return {w, v: L.v + (it.unit === 'sec' ? 5 : 1), u: it.unit};
 }
 const phSets = it => [...it.log].reverse().find(e => e.sets)?.sets || 3;
+// one row per set, each with its own kg and reps/seconds. Sessions started before this had one row plus a "sets" count.
+function phRows(en, it) {
+  if (!en.rows) {
+    const n = num(en.sets) > 0 ? Math.round(num(en.sets)) : phSets(it);
+    en.rows = Array.from({length: n}, () => ({w: en.w || '', v: en.v || '', done: !!en.done}));
+    delete en.w; delete en.v; delete en.sets; delete en.done;
+  }
+  return en.rows;
+}
+// the active session's entry for an exercise, with its set rows ready
+function phEntry(itemId) {
+  const en = PH().active?.entries.find(e => e.itemId === itemId), it = phItem(itemId).it;
+  if (!en || !it) return null;
+  phRows(en, it); return en;
+}
+// weight hint for set j: the weight typed in an earlier set, else the suggestion
+function phPlaceW(rows, j, nx) {
+  for (let i = j - 1; i >= 0; i--) if (isFinite(num(rows[i].w))) return fmt(num(rows[i].w));
+  return nx ? fmt(nx.w) : 'kg';
+}
+// refresh the weight hints of one exercise's set rows
+function phHints(box, en) {
+  const nx = phNext(phItem(en.itemId).it);
+  box.querySelectorAll('.pset-row').forEach(o => { o.querySelector('[data-pf="w"]').placeholder = phPlaceW(en.rows, +o.dataset.i, nx); });
+}
+// the physio's shoulder press ("only at the bottom") was logged as a gym exercise in Keep; give it its own physio entry
+function addPhysioPress() {
+  const p = phProg('nicklas-shoulders');
+  if (db.physioPress || !p || readOnly) return;
+  if (!p.items.some(it => it.id === 'shoulder-press')) {
+    const old = [['2026-09-20', [[50, 8]]], ['2026-09-25', [[50, 9]]], ['2026-09-27', [[50, 10], [50, 10], [50, 10]]], ['2026-09-29', [[50, 11], [50, 11], [50, 11]]],
+      ['2026-10-01', [[50, 12]]], ['2026-10-03', [[55, 8]]], ['2026-10-06', [[55, 9]]], ['2026-10-09', [[55, 10]]], ['2026-10-11', [[55, 11]]],
+      ['2026-10-18', [[55, 12], [55, 10], [55, 8]]]];
+    const log = old.map(([date, sets], i) => {
+      const e = {n: i + 1, w: sets[0][0], v: sets[0][1], u: 'reps', date, gym: 'aalborg', sets: sets.length};
+      if (sets.some(s => s[1] !== sets[0][1])) e.list = sets.map(([w, v]) => ({w, v}));
+      return e;
+    });
+    p.items.push({id: 'shoulder-press', name: 'Shoulder press (bottom part)', gym: 'aalborg', unit: 'reps', lo: 8, hi: 12, step: 5,
+      notes: 'Only the bottom part, so the focus is on the shoulder — Gym80 machine', log});
+  }
+  db.physioPress = true; save();
+}
 function phLastDate(p) { let d = null; for (const it of p.items) for (const e of it.log) if (e.date && (!d || e.date > d)) d = e.date; return d; }
 
 function renderPhysioStart() {
@@ -929,14 +982,14 @@ function phStart(pid) {
   const p = phProg(pid), gym = db.settings.gym; if (!p) return;
   if (getActive()) { toast('Finish the gym workout first'); return; }
   PH().active = {id: uid(), progId: p.id, date: today(), gym, start: Date.now(),
-    entries: p.items.filter(it => phHere(it, gym)).map(it => ({itemId: it.id, w: '', v: '', sets: '', note: '', done: false}))};
+    entries: p.items.filter(it => phHere(it, gym)).map(it => ({itemId: it.id, note: '', rows: Array.from({length: phSets(it)}, () => ({w: '', v: '', done: false}))}))};
   save(); render(); window.scrollTo(0, 0);
 }
 function renderPhysioSession(a) {
   const p = phProg(a.progId);
   const cards = a.entries.map((en, i) => {
     const {it} = phItem(en.itemId); if (!it) return '';
-    const L = phLast(it), nx = phNext(it), unit = it.unit === 'sec' ? 'Seconds' : 'Reps';
+    const L = phLast(it), nx = phNext(it), unit = it.unit === 'sec' ? 'Seconds' : 'Reps', rows = phRows(en, it);
     const hint = L ? `<div class="hint" data-act="ph-hist" data-x="${it.id}"><span class="more">History ›</span><b>Last</b> · #${L.n}${L.date ? ' · ' + fmtDate(L.date) : ''}: <span class="num">${esc(phText(L))}</span>
         <span class="goal">${nx.up ? 'Level up: ' : 'Next: '}${esc(phText(nx))} <small>· ${esc(ruleText(it))}</small></span></div>`
       : `<div class="hint">First time — ${esc(ruleText(it))}.</div>`;
@@ -948,14 +1001,16 @@ function renderPhysioSession(a) {
       ${it.notes ? `<div class="hint" style="margin-top:6px">📌 ${esc(it.notes)}</div>` : ''}
       <input class="note-in" data-act-input="ph-note" data-x="${it.id}" value="${esc(en.note)}" placeholder="${L?.note ? 'Last time: ' + esc(L.note) : 'Note (how it felt, pain…)'}">
       <div class="sets">
-        <div class="set-h pset-h"><span>kg</span><span></span><span>${unit}</span><span>Sets</span><span></span></div>
-        <div class="set-row pset-row ${en.done ? 'done' : ''}" data-x="${it.id}">
-          <input inputmode="decimal" enterkeyhint="next" aria-label="Weight" data-pf="w" value="${esc(en.w)}" placeholder="${nx ? fmt(nx.w) : 'kg'}">
+        <div class="set-h pset-h"><span>Set</span><span>kg</span><span></span><span>${unit}</span><span></span></div>
+        ${rows.map((r, j) => `<div class="set-row pset-row ${r.done ? 'done' : ''}" data-x="${it.id}" data-i="${j}">
+          <span class="idx">${j + 1}</span>
+          <input inputmode="decimal" enterkeyhint="next" aria-label="Weight set ${j + 1}" data-pf="w" value="${esc(r.w)}" placeholder="${esc(phPlaceW(rows, j, nx))}">
           <span class="x">×</span>
-          <input inputmode="numeric" enterkeyhint="next" aria-label="${unit}" data-pf="v" value="${esc(en.v)}" placeholder="${nx ? fmt(nx.v) : unit.toLowerCase()}">
-          <input inputmode="numeric" enterkeyhint="done" aria-label="Sets" data-pf="sets" value="${esc(en.sets)}" placeholder="${phSets(it)}">
-          <button class="chk" data-act="ph-check" aria-label="Mark ${esc(it.name)} done">${ICON.check}</button>
-        </div></div></article>`;
+          <input inputmode="numeric" enterkeyhint="done" aria-label="${unit} set ${j + 1}" data-pf="v" value="${esc(r.v)}" placeholder="${nx ? fmt(nx.v) : unit.toLowerCase()}">
+          <button class="chk" data-act="ph-check" aria-label="Mark set ${j + 1} done">${ICON.check}</button>
+        </div>`).join('')}</div>
+      <div class="pset-btns"><button class="add-set" data-act="ph-add-set" data-x="${it.id}">+ Add set</button>
+        ${rows.length > 1 ? `<button class="add-set" data-act="ph-del-set" data-x="${it.id}" aria-label="Remove last set">− Set</button>` : ''}</div></article>`;
   }).join('');
   return `<div class="sess-head"><div><h1>${esc(p?.name || 'Physio')}</h1><div class="meta">Physio · ${esc(gymName(a.gym))} · ${fmtDate(a.date, true)} · <span id="elapsed" class="num">0:00</span></div></div>
       <button class="btn primary small" data-act="ph-finish">Finish</button></div>
@@ -966,17 +1021,21 @@ function renderPhysioSession(a) {
 }
 function phFinish(force) {
   const a = PH().active; if (!a) return;
-  const bad = a.entries.find(x => x.done && !(num(x.v) > 0));
-  if (bad) { toast(`${phItem(bad.itemId).it?.name || 'An exercise'}: enter reps or seconds`); return; }
-  const loose = a.entries.filter(x => !x.done && (x.w !== '' || x.v !== '')).length;
-  if (loose && !force) { confirmSheet('Finish session?', `${loose} exercise${loose > 1 ? 's have' : ' has'} numbers typed in but not ticked off — ${loose > 1 ? 'they' : 'it'} won't be saved.`, 'Finish anyway', () => phFinish(true)); return; }
+  a.entries.forEach(en => { const {it} = phItem(en.itemId); if (it) phRows(en, it); else en.rows ||= []; });
+  const loose = a.entries.reduce((n, x) => n + x.rows.filter(r => !r.done && (r.w !== '' || r.v !== '')).length, 0);
+  if (loose && !force) { confirmSheet('Finish session?', `${loose} set${loose > 1 ? 's have' : ' has'} numbers typed in but ${loose > 1 ? 'are' : 'is'} not ticked off — ${loose > 1 ? 'they' : 'it'} won't be saved.`, 'Finish anyway', () => phFinish(true)); return; }
   const out = [];
-  for (const en of a.entries.filter(x => x.done)) {
+  for (const en of a.entries) {
     const {it} = phItem(en.itemId); if (!it) continue;
+    const sets = en.rows.filter(r => r.done && num(r.v) > 0).map(r => ({w: isFinite(num(r.w)) ? num(r.w) : 0, v: num(r.v)}));
+    if (!sets.length) continue;
+    // the best set (heaviest, then most reps/seconds) is what the progress chart and the next suggestion use
+    // a heavier set that stopped below the bottom of the range (e.g. 60×4 tried after 55×12) doesn't count as the new level
+    const fair = it.lo ? sets.filter(s => s.v >= it.lo) : sets;
+    const top = (fair.length ? fair : sets).reduce((b, s) => s.w > b.w || (s.w === b.w && s.v > b.v) ? s : b);
     const L = phLast(it);
-    const e = {n: (L?.n || 0) + 1, w: num(en.w) || 0, v: num(en.v), u: it.unit, date: a.date, gym: a.gym, sid: a.id};
-    if (!isFinite(e.w)) e.w = 0;
-    if (num(en.sets) > 0) e.sets = Math.round(num(en.sets));
+    const e = {n: (L?.n || 0) + 1, w: top.w, v: top.v, u: it.unit, date: a.date, gym: a.gym, sid: a.id, sets: sets.length};
+    if (sets.some(s => s.w !== top.w || s.v !== top.v)) e.list = sets;
     if (en.note.trim()) e.note = en.note.trim();
     it.log.push(e); out.push({it, e, up: L && e.w > (num(L.w) || 0)});
   }
@@ -1012,7 +1071,7 @@ function phChart(it) {
 function physioSheet(id, keepScroll) {
   const {p, it} = phItem(id); if (!it) return;
   const top = sheet.scrollTop, log = it.log, L = phLast(it), nx = phNext(it);
-  const first = log.find(e => e.w > 0), dated = log.filter(e => e.date).length;
+  const first = log.find(e => e.w > 0), dated = log.filter(e => e.sid).length;
   const recent = log.slice().reverse().slice(0, ui.phAll ? log.length : 8);
   const byW = log.some(e => e.w > 0);
   openSheet(`<h3 style="margin-bottom:6px">${esc(it.name)}</h3>
@@ -1105,7 +1164,7 @@ async function importPhysio() {
   if (!data || !Array.isArray(data.programs) || !data.programs.every(p => p && p.id && Array.isArray(p.items) && p.items.every(it => it && it.id && Array.isArray(it.log)))) return;
   const have = new Set(PH().programs.map(p => p.id));
   PH().programs.push(...data.programs.filter(p => !have.has(p.id)));
-  db.physioV1 = true; save();
+  db.physioV1 = true; save(); addPhysioPress();
   if (!getActive() && !PH().active && !ui.sheetOpen && ui.tab !== 'detail') render();
   toast('Physio programs added — switch to Physio on the Train tab');
 }
@@ -1153,7 +1212,7 @@ function addExerciseSheet() {
 function pickList(q) {
   const s = getActive(); q = q.trim().toLowerCase();
   const used = new Set(s.entries.map(en => en.exId));
-  const match = e => !q || (e.name + ' ' + gymName(e.gym) + ' ' + gName(e.groupId)).toLowerCase().includes(q);
+  const match = e => !q || hits(e.name + ' ' + gymName(e.gym) + ' ' + gName(e.groupId), q);
   const here = e => !e.gym || e.gym === s.gym;
   const row = (e, showWhere) => { const last = lastDates()[e.id]; return `<button class="row-item" data-act="pick-ex" data-x="${e.id}" ${used.has(e.id) ? 'style="opacity:.45"' : ''}>
       <div class="grow"><div class="t">${esc(e.name)}</div><div class="s">${showWhere ? esc(gymName(e.gym)) + ' · ' + esc(gName(e.groupId)) + ' · ' : ''}${last ? 'last ' + fmtDate(last) : 'not logged yet'}</div></div>${ICON.plus.replace('<svg', '<svg class="chev"')}</button>`; };
@@ -1273,7 +1332,7 @@ $('#importFile').addEventListener('change', async ev => {
     if (!ok) throw new Error('bad');
     confirmSheet('Replace all data?', `The backup has ${d.sessions.filter(s => s.done).length} workouts and ${d.exercises.length} exercises. It replaces what is on this phone now${PH().programs.length && !d.physio ? ' — physio sessions logged in the app are not in it and will be lost' : ''}.`, 'Replace', () => {
       try { localStorage.setItem(KEY + '.before-import', JSON.stringify(db)); } catch (e) {}
-      leaveDetail(); db = d; db.physio ||= {programs: [], active: null}; computeFactors(); recomputePRs(); save(); ui.tab = 'train'; render(); renderRest(); toast('Backup restored'); importPhysio();
+      leaveDetail(); db = d; db.physio ||= {programs: [], active: null}; addPhysioPress(); computeFactors(); recomputePRs(); save(); ui.tab = 'train'; render(); renderRest(); toast('Backup restored'); importPhysio();
     });
   } catch (e) { toast('That file is not a Liftbook backup'); }
 });
@@ -1328,16 +1387,28 @@ document.addEventListener('click', ev => {
     case 'mode': db.settings.mode = el.dataset.m; ui.sel = null; save(); render(); break;
     case 'ph-start': phStart(el.dataset.p); break;
     case 'ph-check': {
-      const row = el.closest('.pset-row'), en = PH().active?.entries.find(e => e.itemId === row.dataset.x); if (!en) break;
-      if (en.done) { en.done = false; row.classList.remove('done'); save(); break; }
+      const row = el.closest('.pset-row'), en = phEntry(row.dataset.x), r = en?.rows[+row.dataset.i]; if (!r) break;
+      if (r.done) { r.done = false; row.classList.remove('done'); save(); break; }
+      phHints(row.parentElement, en);   // weight hint from what is typed right now, not from when the page was drawn
       const inp = f => { const i = row.querySelector(`[data-pf="${f}"]`); if (i.value === '' && isFinite(num(i.placeholder))) i.value = i.placeholder; return i; };
-      const wi = inp('w'), vi = inp('v'), si = inp('sets');
+      const wi = inp('w'), vi = inp('v');
       if (!(num(vi.value) > 0)) { toast('Enter reps or seconds first'); vi.focus(); break; }
-      en.w = isFinite(num(wi.value)) ? wi.value.replace(',', '.') : '0'; wi.value = en.w;
-      en.v = String(num(vi.value)); en.sets = num(si.value) > 0 ? String(Math.round(num(si.value))) : '';
-      en.done = true; row.classList.add('done'); save(); startRest();
+      r.w = isFinite(num(wi.value)) ? wi.value.replace(',', '.') : '0'; wi.value = r.w;
+      r.v = String(num(vi.value)); vi.value = r.v;
+      r.done = true; row.classList.add('done'); save(); startRest();
+      phHints(row.parentElement, en);   // later sets with no weight typed now suggest this weight
       try { navigator.vibrate?.(15); } catch (e) {}
       break;
+    }
+    case 'ph-add-set': {
+      const en = phEntry(el.dataset.x); if (!en) break;
+      const last = en.rows[en.rows.length - 1];
+      en.rows.push({w: last?.done ? last.w : '', v: '', done: false}); save(); render(); break;
+    }
+    case 'ph-del-set': {
+      const en = phEntry(el.dataset.x); if (!en || en.rows.length < 2) break;
+      if (en.rows[en.rows.length - 1].done) { toast('Untick the last set first'); break; }
+      en.rows.pop(); save(); render(); break;
     }
     case 'ph-finish': phFinish(); break;
     case 'ph-discard': confirmSheet('Discard session?', 'Nothing from this physio session will be saved.', 'Discard', () => { PH().active = null; db.rest = null; save(); render(); renderRest(); }); break;
@@ -1472,8 +1543,8 @@ document.addEventListener('click', ev => {
 document.addEventListener('input', ev => {
   const el = ev.target;
   if (el.dataset.pf) {
-    const en = PH().active?.entries.find(e => e.itemId === el.closest('.pset-row').dataset.x);
-    if (en) { en[el.dataset.pf] = el.value; save(); }
+    const row = el.closest('.pset-row'), r = phEntry(row.dataset.x)?.rows[+row.dataset.i];
+    if (r) { r[el.dataset.pf] = el.value; save(); if (el.dataset.pf === 'w') phHints(row.parentElement, phEntry(row.dataset.x)); }
   } else if (el.dataset.actInput === 'ph-note') { const en = PH().active?.entries.find(e => e.itemId === el.dataset.x); if (en) { en.note = el.value; save(); } }
   else if (el.dataset.actInput === 'ph-pnote' || el.dataset.actInput === 'ph-pname') {
     const p = phProg(el.dataset.p); if (p) { p[el.dataset.actInput === 'ph-pnote' ? 'note' : 'name'] = el.value; save(); ui.redraw = true; }
@@ -1487,7 +1558,7 @@ document.addEventListener('input', ev => {
 document.addEventListener('keydown', ev => {
   if (ev.key === 'Enter' && ev.target.dataset.pf) {
     ev.preventDefault();
-    const row = ev.target.closest('.pset-row'), next = {w: 'v', v: 'sets'}[ev.target.dataset.pf];
+    const row = ev.target.closest('.pset-row'), next = {w: 'v'}[ev.target.dataset.pf];
     if (next) row.querySelector(`[data-pf="${next}"]`).focus(); else { ev.target.blur(); if (!row.classList.contains('done')) row.querySelector('.chk').click(); }
     return;
   }
@@ -1535,7 +1606,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ============ boot ============ */
-computeFactors(); recomputePRs();
+computeFactors(); recomputePRs(); addPhysioPress();
 if (getActive() || PH().active) ui.tab = 'train';
 render(); renderRest();
 importKeep().then(importPhysio);
