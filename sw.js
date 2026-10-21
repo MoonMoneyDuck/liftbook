@@ -1,6 +1,6 @@
 // Offline support: open instantly from the phone's cache, fetch the newest version in the background,
 // and tell the page when a new version has arrived so it can offer a reload.
-const CACHE = 'liftbook-v4';
+const CACHE = 'liftbook-v5';
 const FILES = ['./', 'index.html', 'keep-seed.json', 'physio-seed.json', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
@@ -9,6 +9,11 @@ self.addEventListener('install', e => {
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+// tapping the rest notification opens the app
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(cs => cs.length ? cs[0].focus() : self.clients.openWindow('./')));
 });
 self.addEventListener('fetch', e => {
   const req = e.request;

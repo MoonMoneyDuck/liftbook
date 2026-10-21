@@ -37,4 +37,14 @@ Aalborg (Gym & Fitness), Brønderslev, Klarup, Other (Manna, Hals, FW…). Chose
 - Imported once (`db.physioV1`).
 - v4 (21 Oct 2026): each physio set is its own row (kg × reps/seconds, + Add set / − Set). A log entry keeps the best set as `w`/`v` (heaviest set that reached the bottom of the range), `sets` = count, and `list` = every set when they differed. Old active sessions (one row + a sets count) are converted by `phRows`.
 - "Shoulder press (bottom part)" (Aalborg, Gym80, 8–12 then +5 kg) was added by `addPhysioPress()` (`db.physioPress`), with the 10 "only at the bottom" sessions from Keep (20 Sep – 18 Oct 2026). Those sessions are still in the gym log under Gym80 Shoulder Press Machine too.
+## Photos (v4)
+- IndexedDB `liftbook-photos`: store `photos` = {id, owner, date, t, thumb} (loaded at start), store `full` = {id, blob} (loaded when opened). owner = gym exercise id, `ph:<physio item id>` or `body`. NOT in the JSON backup.
+- Shrunk on the phone to 1600 px / 360 px JPEG (decoded once). Date = EXIF date if found in the first 128 KB, else the file date.
+- Where: exercise page + exercise menu (⋯ → Add photo) and thumbnails on the workout card; physio exercise sheet + card; Progress → Body photos (grid + viewer with older/newer).
+- Deleting an exercise / physio exercise, or Erase all, deletes its photos.
+
+## Rest alert in headphones (v4)
+- Settings → "Sound in headphones when rest is over" posts a silent notification (tag `lb-rest`, body `REST 120 s · until 14:32:10`) when a rest starts or is changed (±15), and removes it when the timer is stopped or 20 s after it ended. `sw.js` opens the app when it's tapped.
+- A MacroDroid macro on the phone does the waiting and plays a sound only when headphones are connected (the web app can't detect headphones and is paused with the screen off).
+
 - Search (exercise picker + Progress) matches every typed word and ignores spaces and dashes, so "pull down" finds "Pulldown".

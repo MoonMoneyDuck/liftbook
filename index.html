@@ -236,6 +236,18 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .ph-top .s{color:var(--text-2);font-size:13px;margin-top:2px}
 .ph-card .row-item{background:var(--surface-2);border-color:transparent;padding:10px 12px}
 .set-row.pset-row,.set-h.pset-h{grid-template-columns:26px 1fr 14px 1fr 48px}
+/* photos */
+.pstrip{display:flex;gap:8px;overflow-x:auto;margin:10px 0 2px;padding-bottom:2px}
+.pthumb{flex:none;width:64px;height:64px;border-radius:12px;overflow:hidden;background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center;color:var(--text-2)}
+.pthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.pthumb svg{width:24px;height:24px}
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.pcell{position:relative;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:var(--surface-2)}
+.pcell img{width:100%;height:100%;object-fit:cover;display:block}
+.pcell span{position:absolute;left:6px;bottom:6px;font-size:11px;font-weight:700;padding:2px 6px;border-radius:8px;background:rgba(0,0,0,.6);color:#fff}
+.pview img{width:100%;max-height:62vh;object-fit:contain;border-radius:12px;background:var(--surface-2);display:block}
+.pnav{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;margin-top:10px;text-align:center;font-weight:700}
+.pnav small{color:var(--muted);font-weight:600}
 .pset-btns{display:grid;grid-template-columns:1fr auto;gap:8px}
 .pset-btns .add-set:nth-child(2){padding:0 14px}
 .pset-h span{text-align:center}
@@ -288,6 +300,7 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 <div id="sheet" class="sheet-wrap" hidden><div class="scrim" data-act="close-sheet"></div><div class="sheet" role="dialog" aria-modal="true"></div></div>
 <div id="toast" class="toast" role="status"></div>
 <input type="file" id="importFile" accept="application/json,.json" hidden>
+<input type="file" id="photoFile" accept="image/*" hidden>
 
 <script>
 'use strict';
@@ -316,7 +329,8 @@ const ICON = {
   down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
   trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
   chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16M8 15l4-5 3 3 5-6"/></svg>',
-  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>'
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>',
+  camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>'
 };
 
 /* ============ helpers ============ */
@@ -656,6 +670,7 @@ function exerciseCard(s, en) {
     </div>
     ${hint}
     ${ex.notes ? `<div class="hint" style="margin-top:6px">📌 ${esc(ex.notes)}</div>` : ''}
+    ${photoStrip(en.exId, false)}
     <input class="note-in" data-act-input="note" data-en="${en.id}" value="${esc(en.note)}" placeholder="${lastNote ? 'Last time: ' + esc(lastNote) : 'Setup note (seat hole, grip…)'}">
     <div class="sets">
       <div class="set-h"><span>Set</span><span style="text-align:center">Prev</span><span style="text-align:center">kg</span><span></span><span style="text-align:center">Reps</span><span></span></div>
@@ -687,7 +702,10 @@ function renderHistory() {
 
 function renderExercises() {
   const chips = [['all', 'All'], ...GROUPS].map(([id, n]) => `<button class="fchip" data-act="exgroup" data-g="${id}" aria-pressed="${ui.exGroup === id}">${n}</button>`).join('');
+  const body = photos.filter(p => p.owner === 'body');
   return `${modeSeg()}<h1>Progress</h1>
+    <button class="row-item" style="margin:10px 0 4px" data-act="detail" data-x="body">
+      <div class="grow"><div class="t">📷 Body photos</div><div class="s">${body.length ? `${body.length} photo${body.length > 1 ? 's' : ''} · last ${fmtDate(body[0].date)}` : 'Take progress photos and compare them over time'}</div></div>${ICON.chev}</button>
     ${gymChips()}
     <div class="scroller">${chips}</div>
     <input class="search" type="search" placeholder="Search exercises" value="${esc(ui.exQuery)}" data-act-input="exsearch">
@@ -863,6 +881,7 @@ function renderPhysioReport(pid) {
 }
 function renderDetail(id) {
   if (String(id).startsWith('ph:')) return renderPhysioReport(id.slice(3));
+  if (id === 'body') return renderBodyPhotos();
   const ex = getEx(id);
   if (!ex) { ui.tab = 'exercises'; return renderExercises(); }
   const h = logOf(id);
@@ -872,6 +891,7 @@ function renderDetail(id) {
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px"><span class="chip">${esc(gName(ex.groupId))}</span><span class="chip gym">${esc(gymName(ex.gym))}</span>
       <button class="chip chip-btn" data-act="edit-ex" data-x="${ex.id}">${ICON.edit} Edit</button></div>
     ${ex.notes ? `<p class="sub" style="margin:8px 0 0">📌 ${esc(ex.notes)}</p>` : ''}
+    ${photoStrip(ex.id, true)}
     <div style="height:12px"></div>
     ${exStats(h)}
     ${h.length ? chartCard(h) : ''}
@@ -954,6 +974,7 @@ function addPhysioPress() {
     });
     p.items.push({id: 'shoulder-press', name: 'Shoulder press (bottom part)', gym: 'aalborg', unit: 'reps', lo: 8, hi: 12, step: 5,
       notes: 'Only the bottom part, so the focus is on the shoulder — Gym80 machine', log});
+    if (/^Add shoulder press too/.test(p.note || '')) p.note = 'Shoulder press: only the bottom part, so the focus is on the shoulder.';
   }
   db.physioPress = true; save();
 }
@@ -999,6 +1020,7 @@ function renderPhysioSession(a) {
         <button class="icon-btn" data-act="ph-hist" data-x="${it.id}" aria-label="History">${ICON.chart}</button></div>
       ${hint}
       ${it.notes ? `<div class="hint" style="margin-top:6px">📌 ${esc(it.notes)}</div>` : ''}
+      ${photoStrip('ph:' + it.id, false)}
       <input class="note-in" data-act-input="ph-note" data-x="${it.id}" value="${esc(en.note)}" placeholder="${L?.note ? 'Last time: ' + esc(L.note) : 'Note (how it felt, pain…)'}">
       <div class="sets">
         <div class="set-h pset-h"><span>Set</span><span>kg</span><span></span><span>${unit}</span><span></span></div>
@@ -1077,6 +1099,7 @@ function physioSheet(id, keepScroll) {
   openSheet(`<h3 style="margin-bottom:6px">${esc(it.name)}</h3>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"><span class="chip">${esc(p.name)}</span>${it.gym ? `<span class="chip gym">${esc(gymName(it.gym))}</span>` : ''}${it.retired ? '<span class="chip">Old version</span>' : ''}<span class="chip">${esc(ruleText(it))}</span></div>
     ${it.notes ? `<p class="explain" style="margin:0 0 12px">📌 ${esc(it.notes)}</p>` : ''}
+    <div style="margin:-6px 0 12px">${photoStrip('ph:' + it.id, true)}</div>
     ${log.length ? `<div class="stats two">
         <div class="stat"><div class="k">Sessions</div><div class="v num">${log.length}</div><div class="d">${dated ? dated + ' logged in the app' : 'all from Keep'}</div></div>
         <div class="stat"><div class="k">Last</div><div class="v num" style="font-size:19px">${esc(phText(L, true)) || '–'}</div><div class="d">#${L.n}${L.date ? ' · ' + fmtDate(L.date) : ''}</div></div>
@@ -1169,6 +1192,115 @@ async function importPhysio() {
   toast('Physio programs added — switch to Physio on the Train tab');
 }
 
+/* ============ photos ============ */
+// Photos are too big for localStorage, so they live in IndexedDB on the phone — and are NOT in the backup file.
+// owner = a gym exercise id, 'ph:<physio exercise id>', or 'body' (progress photos).
+// Store "photos" has the small thumbnail + info (loaded at start), store "full" the big picture (loaded when opened).
+let photos = [];          // {id, owner, date, t}, newest first
+const thumbURL = {};      // photo id -> object URL of its thumbnail
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('liftbook-photos', 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('photos', {keyPath: 'id'}); r.result.createObjectStore('full', {keyPath: 'id'}); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function idbTx(stores, mode, fn) {
+  const d = await idbOpen();
+  try {
+    return await new Promise((res, rej) => {
+      const tx = d.transaction(stores, mode), r = fn(tx);
+      tx.oncomplete = () => res(r && r.result); tx.onerror = tx.onabort = () => rej(tx.error);
+    });
+  } finally { d.close(); }
+}
+async function loadPhotos() {
+  try {
+    const all = await idbTx(['photos'], 'readonly', tx => tx.objectStore('photos').getAll());
+    photos = (all || []).map(({thumb, ...p}) => { thumbURL[p.id] = URL.createObjectURL(thumb); return p; }).sort((a, b) => b.date.localeCompare(a.date) || b.t - a.t);
+  } catch (e) { photos = []; }
+}
+// scale a decoded picture down to at most `max` pixels on the long side, as JPEG (a phone photo is ~5 MB; this makes it ~0.3 MB)
+function shrink(bmp, max, q) {
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('encode')), 'image/jpeg', q));
+}
+// the day a photo was taken: the EXIF date ("2026:10:21 14:05:33") near the start of a JPEG, else the file's date, never later than today
+async function photoDay(file) {
+  let m = null;
+  try { m = new TextDecoder('latin1').decode(await file.slice(0, 131072).arrayBuffer()).match(/(20\d\d):(\d\d):(\d\d) \d\d:\d\d:\d\d/); } catch (e) {}
+  const s = m ? `${m[1]}-${m[2]}-${m[3]}` : (() => { const d = new Date(file.lastModified || Date.now()); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  return isNaN(dateObj(s)) || s > today() ? today() : s;
+}
+async function addPhoto(owner, file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, {imageOrientation: 'from-image'}); }
+  catch (e) { toast("Couldn't read that photo (HEIC? Turn off \"High efficiency pictures\" in the camera settings)"); return; }
+  try {
+    // decode once and make both sizes from it, one after the other (a 200 MP photo takes ~800 MB decoded)
+    const full = await shrink(bmp, 1600, 0.82), thumb = await shrink(bmp, 360, 0.72);
+    bmp.close?.(); bmp = null;
+    const p = {id: uid(), owner, date: await photoDay(file), t: Date.now()};
+    await idbTx(['photos', 'full'], 'readwrite', tx => { tx.objectStore('photos').put({...p, thumb}); tx.objectStore('full').put({id: p.id, blob: full}); });
+    photos.unshift(p); photos.sort((a, b) => b.date.localeCompare(a.date) || b.t - a.t); thumbURL[p.id] = URL.createObjectURL(thumb);
+    toast('Photo saved'); photoRefresh();
+  } catch (e) { bmp?.close?.(); toast("Couldn't save that photo"); }
+}
+// remove every photo of an exercise (when the exercise is deleted), or all photos (erase)
+async function delPhotosOf(test) {
+  const ids = photos.filter(test).map(p => p.id); if (!ids.length) return;
+  try { await idbTx(['photos', 'full'], 'readwrite', tx => ids.forEach(id => { tx.objectStore('photos').delete(id); tx.objectStore('full').delete(id); })); } catch (e) { return; }
+  photos = photos.filter(p => !ids.includes(p.id));
+  ids.forEach(id => { if (thumbURL[id]) URL.revokeObjectURL(thumbURL[id]); delete thumbURL[id]; });
+}
+async function delPhoto(id) {
+  try { await idbTx(['photos', 'full'], 'readwrite', tx => { tx.objectStore('photos').delete(id); tx.objectStore('full').delete(id); }); }
+  catch (e) { toast("Couldn't delete the photo"); return; }
+  photos = photos.filter(p => p.id !== id);
+  if (thumbURL[id]) URL.revokeObjectURL(thumbURL[id]);
+  delete thumbURL[id];
+  photoRefresh();
+}
+// redraw whatever shows photos right now
+function photoRefresh() {
+  if (ui.sheetOpen) ui.redraw = true;   // the page under the sheet is redrawn when it closes
+  if (ui.sheetOpen && ui.sheetPh) physioSheet(ui.sheetPh, true);
+  else if (!ui.sheetOpen) render();
+}
+// a row of thumbnails (+ a camera button to add one)
+function photoStrip(owner, canAdd) {
+  const th = photos.filter(p => p.owner === owner).map(p => `<button class="pthumb" data-act="photo" data-id="${p.id}" aria-label="Photo from ${fmtDate(p.date)}"><img src="${thumbURL[p.id] || ''}" alt=""></button>`).join('');
+  if (!th && !canAdd) return '';
+  return `<div class="pstrip">${th}${canAdd ? `<button class="pthumb" data-act="add-photo" data-o="${esc(owner)}" aria-label="Add photo">${ICON.camera}</button>` : ''}</div>`;
+}
+function photoSheet(id) {
+  const p = photos.find(x => x.id === id); if (!p) return;
+  const same = photos.filter(x => x.owner === p.owner), i = same.indexOf(p), older = same[i + 1], newer = same[i - 1];
+  openSheet(`<div class="pview"><img id="pfull" src="${thumbURL[id] || ''}" alt="Photo from ${fmtDate(p.date)}"></div>
+    <div class="pnav"><button class="btn" data-act="photo" data-id="${older?.id || ''}" ${older ? '' : 'disabled'}>‹ Older</button>
+      <div class="num">${fmtDate(p.date, true)}<br><small>${i + 1} of ${same.length}</small></div>
+      <button class="btn" data-act="photo" data-id="${newer?.id || ''}" ${newer ? '' : 'disabled'}>Newer ›</button></div>
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn danger block" data-act="del-photo" data-id="${id}">${ICON.trash} Delete</button>
+      <button class="btn primary block" data-act="close-sheet">Close</button></div>`);
+  ui.photoView = id;
+  idbTx(['full'], 'readonly', tx => tx.objectStore('full').get(id)).then(r => {
+    const img = $('#pfull');
+    if (!r || !img || ui.photoView !== id) return;
+    const u = URL.createObjectURL(r.blob); img.onload = () => URL.revokeObjectURL(u); img.src = u;
+  }).catch(() => {});
+}
+function renderBodyPhotos() {
+  const list = photos.filter(p => p.owner === 'body');
+  return `<button class="back" data-act="back">${ICON.back} Progress</button>
+    <h1>Body photos</h1>
+    <p class="sub">Newest first. Tap one to see it big and step through the others. Stored on this phone only — not in the backup file.</p>
+    <button class="btn primary block" style="margin-top:12px" data-act="add-photo" data-o="body">${ICON.camera} Add photo</button>
+    ${list.length ? `<div class="pgrid">${list.map(p => `<button class="pcell" data-act="photo" data-id="${p.id}"><img src="${thumbURL[p.id] || ''}" alt=""><span>${fmtDate(p.date)}</span></button>`).join('')}</div>`
+      : '<div class="empty">No photos yet.</div>'}`;
+}
+
 /* ============ sheet ============ */
 const sheetWrap = $('#sheet'), sheet = $('.sheet');
 function openSheet(html) {
@@ -1249,14 +1381,17 @@ function settingsSheet() {
   const restOpts = [60, 90, 120, 150, 180, 240].map(v => `<button data-act="set-rest" data-v="${v}" aria-pressed="${db.settings.rest === v}">${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}</button>`).join('');
   openSheet(`<h3>Settings</h3>
     <div class="field"><span>Rest timer</span><div class="seg restseg">${restOpts}<button data-act="set-rest" data-v="0" aria-pressed="${!db.settings.rest}">Off</button></div></div>
+    <div class="field" style="margin-top:14px"><span>Sound in headphones when rest is over</span>
+      <label class="chkline"><input type="checkbox" data-act="rest-alert" ${db.settings.restAlert ? 'checked' : ''}> Post a silent "REST" notification for MacroDroid</label>
+      <p class="explain" style="margin:4px 0 0;font-size:13px">MacroDroid waits until the rest is over and beeps only when headphones are connected — also with the screen off.</p></div>
     <div class="field" style="margin-top:18px"><span>How strong you are by exercise order</span>
       <p class="explain" style="margin:0">Your strength on the Nth exercise for a muscle, compared with doing it first. Learned from your own log — it gets more personal as you train in different orders.</p>
       <table class="ftable"><thead><tr><th>Order</th><th>Strength</th><th>Based on</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="field" style="margin-top:18px"><span>Backup</span>
-      <p class="explain" style="margin:0 0 8px">Everything lives only on this phone. Export a backup now and then (e.g. to Google Drive).</p>
+      <p class="explain" style="margin:0 0 8px">Everything lives only on this phone. Export a backup now and then (e.g. to Google Drive). Photos are not in the backup file — they live only in the app. A picture taken from inside Liftbook is not saved to your gallery, so for body photos you want to keep for sure, take them with the camera app and pick them from the gallery.</p>
       <div style="display:flex;gap:8px"><button class="btn block" data-act="export">Export</button><button class="btn block" data-act="import">Import</button></div></div>
     <div style="margin-top:18px"><button class="btn danger block" data-act="reset">Erase all data</button></div>
-    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v3.5 · works offline</p>`);
+    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v4.0 · works offline</p>`);
 }
 
 function sessionSheet(s) {
@@ -1320,6 +1455,10 @@ function exportData() {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
+$('#photoFile').addEventListener('change', ev => {
+  const f = ev.target.files[0], owner = ui.photoOwner; ev.target.value = '';
+  if (f && owner) addPhoto(owner, f);
+});
 $('#importFile').addEventListener('change', async ev => {
   const f = ev.target.files[0]; ev.target.value = '';
   if (!f) return;
@@ -1344,7 +1483,26 @@ function startRest() {
   if (!db.settings.rest) return;
   db.rest = {end: Date.now() + db.settings.rest * 1000}; restDoneShown = false; save(); renderRest();
 }
+// Sound in headphones when the rest is over (Settings). A web app can't tell whether headphones are in, and the phone
+// pauses it while the screen is off. So it posts a silent notification "REST 120 s"; a MacroDroid macro on the phone
+// waits that long and plays a sound only if headphones are connected. Stopping the timer removes the notification,
+// which cancels the macro. After a normal end the notification is removed 20 s later, when the timer pill goes away.
+let noteEnd = null;
+function restNotify() {
+  const end = db.rest?.end ?? null;
+  if (end === noteEnd) return;
+  noteEnd = end;
+  if (!db.settings.restAlert || !('Notification' in window) || Notification.permission !== 'granted' || !navigator.serviceWorker) return;
+  navigator.serviceWorker.ready.then(reg => {
+    if (end !== noteEnd) return;   // changed again while waiting
+    if (end && end > Date.now())
+      return reg.showNotification('Liftbook rest', {tag: 'lb-rest', silent: true, renotify: true,
+        body: `REST ${Math.round((end - Date.now()) / 1000)} s · until ${new Date(end).toLocaleTimeString('en-GB')}`});
+    if (!end) return reg.getNotifications({tag: 'lb-rest'}).then(ns => ns.forEach(n => n.close()));
+  }).catch(() => {});
+}
 function renderRest() {
+  restNotify();
   document.body.classList.toggle('resting', !!db.rest);
   if (!db.rest) { restEl.hidden = true; restEl.dataset.mode = ''; return; }
   const left = Math.round((db.rest.end - Date.now()) / 1000);
@@ -1410,6 +1568,12 @@ document.addEventListener('click', ev => {
       if (en.rows[en.rows.length - 1].done) { toast('Untick the last set first'); break; }
       en.rows.pop(); save(); render(); break;
     }
+    case 'photo': photoSheet(el.dataset.id); break;
+    case 'add-photo':
+      ui.photoOwner = el.dataset.o;
+      if (ui.sheetOpen && !ui.sheetPh) closeSheet();   // e.g. the exercise menu; a physio sheet stays open and shows the new photo
+      $('#photoFile').click(); break;
+    case 'del-photo': { const id = el.dataset.id; confirmSheet('Delete photo?', 'It is removed from Liftbook on this phone.', 'Delete', () => delPhoto(id)); break; }
     case 'ph-finish': phFinish(); break;
     case 'ph-discard': confirmSheet('Discard session?', 'Nothing from this physio session will be saved.', 'Discard', () => { PH().active = null; db.rest = null; save(); render(); renderRest(); }); break;
     case 'ph-hist': ui.sel = null; ui.phAll = false; physioSheet(el.dataset.x); break;
@@ -1420,7 +1584,7 @@ document.addEventListener('click', ev => {
     case 'ph-del': {
       const {p, it} = phItem(el.dataset.x); if (!it) { closeSheet(); break; }
       confirmSheet('Delete exercise?', `Its ${it.log.length} logged session${it.log.length === 1 ? '' : 's'} will be removed too. To just stop doing it, mark it as an old version instead.`, 'Delete', () => {
-        p.items = p.items.filter(x => x !== it);
+        p.items = p.items.filter(x => x !== it); delPhotosOf(ph => ph.owner === 'ph:' + it.id);
         if (PH().active) PH().active.entries = PH().active.entries.filter(en => en.itemId !== it.id);
         save(); render();
       });
@@ -1474,6 +1638,7 @@ document.addEventListener('click', ev => {
         ${i > 0 ? `<button class="opt" data-act="move" data-en="${en.id}" data-d="-1">${ICON.up} Move earlier</button>` : ''}
         ${i < s.entries.length - 1 ? `<button class="opt" data-act="move" data-en="${en.id}" data-d="1">${ICON.down} Move later</button>` : ''}
         ${en.sets.length > 1 ? `<button class="opt" data-act="del-set" data-en="${en.id}">${ICON.trash} Remove last set</button>` : ''}
+        ${getEx(en.exId) ? `<button class="opt" data-act="add-photo" data-o="${en.exId}">${ICON.camera} Add photo (machine, seat, grip…)</button>` : ''}
         <button class="opt" data-act="detail" data-x="${en.exId}">${ICON.chart} See progress</button>
         <button class="opt danger" data-act="remove-entry" data-en="${en.id}">${ICON.trash} Remove from workout</button>`);
       break;
@@ -1524,7 +1689,7 @@ document.addEventListener('click', ev => {
     case 'del-ex': {
       const id = el.dataset.x, n = logOf(id).length;
       confirmSheet('Delete exercise?', n ? `It has ${n} logged session${n > 1 ? 's' : ''}; those sets will be removed too.` : 'It has no logged sessions.', 'Delete', () => {
-        db.exercises = db.exercises.filter(e => e.id !== id);
+        db.exercises = db.exercises.filter(e => e.id !== id); delPhotosOf(ph => ph.owner === id);
         db.sessions.forEach(s => { s.entries = s.entries.filter(en => en.exId !== id); });
         db.sessions = db.sessions.filter(s => !s.done || s.entries.length);
         computeFactors(); recomputePRs(); save(); if (ui.tab === 'detail') { ui.tab = ui.detailFrom || 'exercises'; silentBack(); } render();
@@ -1533,9 +1698,19 @@ document.addEventListener('click', ev => {
     }
     case 'settings': settingsSheet(); break;
     case 'set-rest': db.settings.rest = +el.dataset.v; save(); settingsSheet(); break;
+    case 'rest-alert': {
+      if (!el.checked) { db.settings.restAlert = false; save(); break; }
+      if (!('Notification' in window) || !navigator.serviceWorker) { el.checked = false; toast('Notifications are not available here'); break; }
+      Notification.requestPermission().then(p => {
+        db.settings.restAlert = p === 'granted'; save();
+        if (p !== 'granted') { el.checked = false; toast('Allow notifications for Liftbook in the phone settings'); return; }
+        noteEnd = undefined; renderRest();   // post it now if a rest is already running
+      });
+      break;
+    }
     case 'export': exportData(); break;
     case 'import': $('#importFile').click(); break;
-    case 'reset': confirmSheet('Erase everything?', 'All exercises and workouts on this phone will be deleted. Export a backup first if you might want them.', 'Erase', () => { leaveDetail(); try { localStorage.setItem(KEY + '.before-erase', JSON.stringify(db)); } catch (e) {} db = {v: 1, exercises: [], sessions: [], active: null, rest: null, keepV2: true, physio: {programs: [], active: null}, physioV1: true, settings: db.settings}; computeFactors(); save(); ui.tab = 'train'; render(); renderRest(); }); break;
+    case 'reset': confirmSheet('Erase everything?', 'All exercises, workouts and photos on this phone will be deleted. Export a backup first if you might want them (photos are not in the backup).', 'Erase', () => { leaveDetail(); delPhotosOf(() => true); try { localStorage.setItem(KEY + '.before-erase', JSON.stringify(db)); } catch (e) {} db = {v: 1, exercises: [], sessions: [], active: null, rest: null, keepV2: true, physio: {programs: [], active: null}, physioV1: true, settings: db.settings}; computeFactors(); save(); ui.tab = 'train'; render(); renderRest(); }); break;
     case 'rest-add': db.rest.end += +el.dataset.v * 1000; save(); restEl.dataset.mode = ''; renderRest(); break;
     case 'rest-stop': db.rest = null; save(); restEl.dataset.mode = ''; renderRest(); break;
   }
@@ -1610,6 +1785,7 @@ computeFactors(); recomputePRs(); addPhysioPress();
 if (getActive() || PH().active) ui.tab = 'train';
 render(); renderRest();
 importKeep().then(importPhysio);
+loadPhotos().then(() => { if (photos.length) photoRefresh(); });
 try { navigator.storage?.persist?.(); } catch (e) {}
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
