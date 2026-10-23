@@ -271,6 +271,31 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .rep .gain{color:var(--good);font-weight:700}
 .two-btn{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:12px}
 .pick-sec{margin:14px 0 6px;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+/* variants, standard pictures, off days (v5) */
+.vchips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+.vchip{height:34px;padding:0 12px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);font-weight:700;font-size:13px;color:var(--text-2)}
+.vchip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.vchip.add{min-width:34px;padding:0 10px;border-style:dashed}
+.pthumb{position:relative}
+.pthumb.stock{background:#fff;border-style:dashed}
+.pthumb .tag{position:absolute;left:3px;bottom:3px;font-size:9px;font-weight:800;padding:1px 4px;border-radius:5px;background:rgba(0,0,0,.62);color:#fff;line-height:1.3}
+.lthumb{flex:none;width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--surface-2);display:block}
+div.lthumb{border:1px dashed var(--line)}
+.picpair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.picpair img{width:100%;aspect-ratio:3/2;object-fit:cover;border-radius:12px;background:#fff;display:block}
+.picgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.picopt{display:flex;flex-direction:column;gap:4px;text-align:left;font-size:12px;font-weight:700;color:var(--text-2);min-width:0}
+.picopt img{width:100%;aspect-ratio:3/2;object-fit:cover;border-radius:10px;background:#fff;display:block}
+.picopt[aria-pressed="true"] img{outline:3px solid var(--accent)}
+.offnote{display:block;margin:0 0 6px;color:var(--muted);font-size:13px}
+.mini{display:inline-block;margin-left:6px;padding:2px 9px;border-radius:8px;background:var(--surface-3);color:var(--text);font-size:12px;font-weight:800;vertical-align:1px}
+.mini:disabled{opacity:.6}
+.tag-off{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:6px;background:var(--surface-3);color:var(--text-2);font-size:11px;font-weight:800;vertical-align:1px}
+.prow{padding:4px 4px 4px 12px;gap:4px}
+.prow .grow{display:block;text-align:left;padding:6px 0}
+.prow .icon-btn{width:36px;height:36px}
+.prow .icon-btn svg{width:18px;height:18px}
+.offlist .row-item{align-items:flex-start}
 @keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
 @keyframes fade{from{opacity:0}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
@@ -318,6 +343,18 @@ const gymName = id => (GYMS.find(g => g[0] === id) || [id, 'Any gym'])[1];
 const DEFAULT_F = {1:1, 2:0.95, 3:0.91, 4:0.88, 5:0.86};
 const PRIOR = 4;          // how many "pretend" observations the starting guess is worth
 const PAIR_WINDOW = 60;   // days: a 2nd/3rd-slot session is compared with the nearest 1st-slot session within this window
+// Off day: a session this far below your usual level is not used as next time's starting point (reps for bodyweight
+// exercises), unless it came after a break of more than OFF_GAP days.
+const OFF_DROP = 0.9, OFF_DROP_BW = 0.8, OFF_GAP = 28;
+
+// Standard pictures from free-exercise-db (github.com/yuhonas/free-exercise-db, public domain). The ones used below are
+// in img/ex/<id>-0.jpg / -1.jpg (start and end of the movement); others are loaded from GitHub when picked.
+// Source list: keep-import/pic_map.json.
+const PIC_GYM = {"45° Smith Press with Bands":"Smith_Machine_Incline_Bench_Press","Ab Machine – Highest Setting":"Ab_Crunch_Machine","Abdominal Crunch Bench":"Decline_Crunch","Alternative Leg Press":"Leg_Press","Barbell Shoulder Press":"Barbell_Shoulder_Press","Barbell Shrug":"Barbell_Shrug","Bench Press":"Barbell_Bench_Press_-_Medium_Grip","Bench Press Machine":"Machine_Bench_Press","Bent-Over Row":"Bent_Over_Barbell_Row","Biceps Curl Machine":"Machine_Bicep_Curl","Old Biceps Curl Machine":"Machine_Bicep_Curl","Cable Curl":"Standing_Biceps_Cable_Curl","Cable Fly":"Cable_Crossover","Cable Fly – Highest Pulley":"Cable_Crossover","Cable Forearm Curl":"Cable_Wrist_Curl","Cable Hammer Curl":"Cable_Hammer_Curls_-_Rope_Attachment","Cable Kickback":"Tricep_Dumbbell_Kickback","Cable Row":"Seated_Cable_Rows","Cable Shrug":"Cable_Shrugs","Calf Raise on Leg Press":"Calf_Press_On_The_Leg_Press_Machine","Chest Press Machine":"Leverage_Chest_Press","Chest-Supported Incline Dumbbell Row":"Dumbbell_Incline_Row","Chest-Supported Row":"Lying_T-Bar_Row","Decline Press":"Leverage_Decline_Chest_Press","Dumbbell Curl (both arms)":"Dumbbell_Bicep_Curl","Dumbbell Lateral Raise":"Side_Lateral_Raise","Dumbbell Lateral Raise to Overhead":"Side_Lateral_Raise","Dumbbell RDL":"Stiff-Legged_Dumbbell_Deadlift","Dumbbell Shoulder Press":"Dumbbell_Shoulder_Press","Face Pull":"Face_Pull","Flat Smith Machine Bench Press":"Smith_Machine_Bench_Press","Fly Machine":"Butterfly","Front Raise":"Front_Dumbbell_Raise","GHD & Variations (Hamstrings)":"Glute_Ham_Raise","Gym80 Shoulder Press Machine":"Machine_Shoulder_Military_Press","Hack Squat":"Hack_Squat","Pendulum Squat":"Hack_Squat","Hip Abductor":"Thigh_Abductor","Hip Adductor":"Thigh_Adductor","Hip Adductor & Abductor":"Thigh_Adductor","Horizontal Leg Press":"Leg_Press","Incline Leg Press":"Leg_Press","Leg Press":"Leg_Press","Single-Leg Horizontal Leg Press":"Leg_Press","Hyperextension":"Hyperextensions_Back_Extensions","Incline Bench Press":"Barbell_Incline_Bench_Press_-_Medium_Grip","Incline Cable Chest Press":"Incline_Cable_Chest_Press","Incline Cable Fly":"Incline_Cable_Flye","Incline Dumbbell Press":"Incline_Dumbbell_Press","Incline Press Machine":"Leverage_Incline_Chest_Press","Incline Press Machine (the other one)":"Leverage_Incline_Chest_Press","Incline Smith Machine Press":"Smith_Machine_Incline_Bench_Press","Iso-Lateral High Row":"Leverage_High_Row","Iso-Lateral Kneeling Leg Curl":"Standing_Leg_Curl","Iso-Lateral Low Row":"Leverage_Iso_Row","Iso-Lateral Row Machine":"Leverage_Iso_Row","Low Row Machine":"Leverage_Iso_Row","Row Machine":"Leverage_Iso_Row","Leg Extension":"Leg_Extensions","Leg Extension Machine":"Leg_Extensions","Low Cable Fly":"Low_Cable_Crossover","Seated Cable Fly":"Cable_Crossover","Lying Hamstring Curl":"Lying_Leg_Curls","Seated Hamstring Curl":"Seated_Leg_Curl","Seated Leg Curl":"Seated_Leg_Curl","Lying Lateral Raise":"Lying_One-Arm_Lateral_Raise","Lying Lateral Raise on Bench":"Lying_One-Arm_Lateral_Raise","Machine Press":"Leverage_Chest_Press","Meadows Row":"One-Arm_Long_Bar_Row","Overhead Cable Extension – High":"Cable_Rope_Overhead_Triceps_Extension","Overhead Cable Extension – Low":"Cable_Rope_Overhead_Triceps_Extension","Overhead Triceps Extension":"Triceps_Overhead_Extension_with_Rope","Pec Deck":"Butterfly","Preacher Curl":"Preacher_Curl","Pulldown":"Wide-Grip_Lat_Pulldown","Pulldown Machine":"Wide-Grip_Lat_Pulldown","Pulldown Variation":"Wide-Grip_Lat_Pulldown","Wide-Grip Pulldown":"Wide-Grip_Lat_Pulldown","Vertical Traction":"Wide-Grip_Lat_Pulldown","Reverse-Grip Pulldown":"Underhand_Cable_Pulldowns","Straight-Arm Pulldown":"Straight-Arm_Pulldown","RDL":"Romanian_Deadlift","RDL on Belt Squat":"Romanian_Deadlift","Rack Pull":"Rack_Pulls","Rear Delt Fly":"Reverse_Flyes","Rear Delt Swing Raise":"Reverse_Flyes","Rear Delt Fly Machine":"Reverse_Machine_Flyes","Single-Arm Rear Delt Fly":"Cable_Rear_Delt_Fly","Seated Calf Raise":"Seated_Calf_Raise","Seated Dumbbell Lateral Raise":"Seated_Side_Lateral_Raise","Shoulder Press":"Leverage_Shoulder_Press","Shrug on Bench Machine":"Leverage_Shrug","Single-Arm Cable Lateral Raise":"Standing_Low-Pulley_Deltoid_Raise","Standing Cable Lateral Raise (both arms)":"Cable_Seated_Lateral_Raise","X Cable Raise":"Cable_Seated_Lateral_Raise","Single-Arm Cable Row":"Seated_One-arm_Cable_Pulley_Rows","Single-Arm Dumbbell Curl":"Dumbbell_Alternate_Bicep_Curl","Single-Arm Smith Machine Row":"One-Arm_Dumbbell_Row","Smith Machine Shoulder Press":"Smith_Machine_Overhead_Shoulder_Press","Smith Squat":"Smith_Machine_Squat","Squat":"Barbell_Squat","Triceps Dip Machine":"Dip_Machine","Triceps Extension":"Triceps_Pushdown"};
+const PIC_PH = {"leg-press-aal-1":"Leg_Press","leg-press-aal-2":"Leg_Press","leg-press-br-1":"Leg_Press","leg-press-br-2":"Leg_Press","calf-1":"Standing_Calf_Raises","bridge-1":"Barbell_Glute_Bridge","bridge-2":"Barbell_Glute_Bridge","bridge-3":"Barbell_Glute_Bridge","rdl":"Romanian_Deadlift","side-raise":"Side_Lateral_Raise","side-hold":"Side_Lateral_Raise","front-raise":"Front_Dumbbell_Raise","front-hold":"Front_Dumbbell_Raise","pushup-hold":"Pushups","shoulder-press":"Machine_Shoulder_Military_Press"};
+const PIC_HERE = new Set([...Object.values(PIC_GYM), ...Object.values(PIC_PH), 'Seated_Leg_Curl', 'Lying_Leg_Curls', 'V-Bar_Pulldown', 'Close-Grip_Front_Lat_Pulldown', 'Underhand_Cable_Pulldowns']);
+const PIC_LIB = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
+const picURL = (id, k = 0) => PIC_HERE.has(id) ? `img/ex/${id}-${k}.jpg` : `${PIC_LIB}${encodeURIComponent(id)}/${k}.jpg`;
 
 const ICON = {
   chev:'<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
@@ -330,7 +367,8 @@ const ICON = {
   trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
   chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16M8 15l4-5 3 3 5-6"/></svg>',
   edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>',
-  camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>'
+  camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>'
 };
 
 /* ============ helpers ============ */
@@ -352,6 +390,15 @@ const e1rm = (w, r) => (w > 0 && r > 0) ? w * (1 + Math.min(r, 15) / 30) : 0;   
 const flat = s => String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const hits = (text, q) => q.split(/\s+/).map(flat).filter(Boolean).every(w => flat(text).includes(w));
 const setsText = sets =>sets.filter(s => s.done).map(s => `${fmt(num(s.w))}×${s.r}`).join(' · ');
+const dayGap = (a, b) => Math.round((dateObj(b) - dateObj(a)) / 864e5);
+// Variants of one exercise (Pulldown: wide grip / V-grip; hamstring curl: lying / seated). Each has its own suggestions
+// and records. Sets logged before an exercise got variants have no variant id and count as its first variant.
+const varsOf = x => x?.variants || [];
+const vidOf = (x, v) => { const vs = varsOf(x); return vs.some(a => a.id === v) ? v : vs[0]?.id || ''; };
+const varName = (x, v) => varsOf(x).length ? varsOf(x).find(a => a.id === vidOf(x, v)).name : '';
+const exLabel = (x, v) => (x?.name || 'Deleted') + (varName(x, v) ? ' · ' + varName(x, v) : '');
+// the standard picture of an exercise (or of one variant; a variant can also have "no picture" = '')
+const picOf = (x, v) => { const va = varsOf(x).find(a => a.id === vidOf(x, v)); return (va && 'img' in va ? va.img : x?.img) || ''; };
 
 /* ============ storage ============ */
 function emptyDb() {
@@ -460,7 +507,7 @@ async function importKeep() {
   db.exercises = exercises; db.sessions = [...keep, ...mine]; db.keepV2 = true;
   if (ui.sheetOpen) closeSheet();
   if (ui.tab === 'detail') { leaveDetail(); ui.tab = 'exercises'; }
-  computeFactors(); recomputePRs(); save(); render(); renderRest();
+  applyPics(); computeFactors(); recomputePRs(); save(); render(); renderRest();
   toast(`Imported ${keep.length} workouts from Google Keep`);
 }
 // newest logged date per exercise (cached until the next save)
@@ -492,24 +539,56 @@ function bestOf(en) {
   for (const s of en.sets) if (s.done) { const v = e1rm(num(s.w), num(s.r)); if (v > e) { e = v; set = s; } }
   return {e, set};
 }
-// all finished entries for one exercise, newest first (optionally only up to a date)
-function logOf(exId, excludeSessionId, upTo) {
-  const out = [];
+// all finished entries for one exercise, newest first (optionally only up to a date, and only one variant)
+function logOf(exId, excludeSessionId, upTo, vid) {
+  const out = [], ex = getEx(exId);
   for (const s of db.sessions) {
     if (!s.done || s.id === excludeSessionId || (upTo && s.date > upTo)) continue;
     for (const en of s.entries) if (en.exId === exId) {
+      const v = vidOf(ex, en.vid);
+      if (vid !== undefined && v !== vid) continue;
       const b = bestOf(en);
       const top = b.set || en.sets.filter(st => st.done).sort((x, y) => num(y.r) - num(x.r))[0];   // bodyweight: most reps
-      if (top) out.push({date: s.date, s, en, best: b.e, top, slot: slot(en), known: known(en)});
+      if (top) out.push({date: s.date, s, en, best: b.e, top, slot: slot(en), known: known(en), vid: v});
     }
   }
   return out.sort((a, b) => b.date.localeCompare(a.date));
 }
+// Off days: a session clearly below your usual level (median of your last 3 normal ones within 120 days), or one you
+// marked, is not used as the starting point next time. Two low sessions in a row are your real level now, so then
+// neither is skipped. en.off: true = marked as off day, false = "it was fine" (never skipped), missing = decide here.
+// h = logOf(...) for ONE exercise + variant, newest first. Returns Map(entry -> 'marked' | 'auto').
+function offFlags(h) {
+  const out = new Map(), ok = [];
+  const bw = h.every(x => !(x.best > 0));
+  let pend = null;   // the previous session, if it was low
+  for (const x of h.slice().reverse()) {
+    if (x.en.off === true) { out.set(x.en, 'marked'); continue; }
+    const val = bw ? num(x.top.r) : x.best > 0 ? freshEq(x) : null;
+    if (!(val > 0)) continue;   // e.g. a 0 kg day on a weighted exercise: neither usual nor off
+    const near = ok.filter(o => dayGap(o.date, x.date) <= 120).slice(-3).map(o => o.val).sort((a, b) => a - b);
+    const ref = near.length ? near[(near.length - 1) >> 1] : 0;
+    const gap = ok.length ? dayGap(ok[ok.length - 1].date, x.date) : Infinity;
+    const low = x.en.off !== false && ref > 0 && gap <= OFF_GAP && val < ref * (bw ? OFF_DROP_BW : OFF_DROP);
+    if (low && !pend) { out.set(x.en, 'auto'); pend = {en: x.en, date: x.date, val}; continue; }
+    if (low) { out.delete(pend.en); ok.push(pend); }
+    ok.push({date: x.date, val}); pend = null;
+  }
+  return out;
+}
+// the same for a log that mixes variants (each variant is judged on its own)
+function offOf(h) {
+  const by = {}, out = new Map();
+  for (const x of h) (by[x.vid] ||= []).push(x);
+  for (const list of Object.values(by)) for (const [en, why] of offFlags(list)) out.set(en, why);
+  return out;
+}
+const offTag = why => why ? `<span class="tag-off">${why === 'marked' ? 'off day' : 'off day?'}</span>` : '';
 function computeFactors() {
   const buckets = {2: [], 3: [], 4: [], 5: []}, byEx = {};
   for (const s of db.sessions) if (s.done) for (const en of s.entries) {
-    const b = bestOf(en).e; if (!b || !known(en)) continue;
-    (byEx[en.exId] ||= []).push({t: dateObj(s.date).getTime(), k: Math.min(slot(en), 5), e: b});
+    const b = bestOf(en).e; if (!b || !known(en) || en.off === true) continue;
+    (byEx[en.exId + '|' + vidOf(getEx(en.exId), en.vid)] ||= []).push({t: dateObj(s.date).getTime(), k: Math.min(slot(en), 5), e: b});
   }
   for (const arr of Object.values(byEx)) {
     const firsts = arr.filter(x => x.k === 1);
@@ -540,24 +619,29 @@ function recomputePRs() {
   for (const s of done) {
     const todays = [];
     for (const en of s.entries) {
-      const cur = bestOf(en).e / fac(slot(en));
-      en.pr = cur > 0 && best[en.exId] > 0 && cur > best[en.exId] + 0.01;
-      todays.push([en.exId, cur]);
+      const cur = bestOf(en).e / fac(slot(en)), key = en.exId + '|' + vidOf(getEx(en.exId), en.vid);
+      en.pr = cur > 0 && best[key] > 0 && cur > best[key] + 0.01;
+      todays.push([key, cur]);
     }
-    for (const [id, cur] of todays) best[id] = Math.max(best[id] || 0, cur);
+    for (const [key, cur] of todays) best[key] = Math.max(best[key] || 0, cur);
   }
 }
 
-function suggest(exId, k, sessionId) {
+// What to aim for today. `last` is the newest session that wasn't an off day; `skipped` are the off days after it.
+function suggest(exId, k, sessionId, vid) {
   const s = db.sessions.find(x => x.id === sessionId);
-  const h = logOf(exId, sessionId, s?.date);
+  const h = logOf(exId, sessionId, s?.date, vid);
   if (!h.length) return null;
-  const last = h[0], ex = getEx(exId), inc = ex.inc || db.settings.inc || 2.5;
+  const off = offFlags(h);
+  const last = h.find(x => !off.has(x.en)) || h[0], ex = getEx(exId), inc = ex.inc || db.settings.inc || 2.5;
+  const skipped = h.slice(0, h.indexOf(last)).map(x => ({x, why: off.get(x.en)}));
   const ratio = last.known ? fac(k) / fac(last.slot) : 1;
   const topW = num(last.top.w), topR = num(last.top.r);
-  return {last, ratio, inc, same: !last.known || last.slot === k, w: roundTo(topW * ratio, inc), r: topR, topW, topR,
+  return {last, skipped, ratio, inc, same: !last.known || last.slot === k, w: roundTo(topW * ratio, inc), r: topR, topW, topR,
           best: Math.max(...h.map(freshEq)), count: h.length};
 }
+// the variant to start with when an exercise is added: the one done last time
+const startVid = (exId, s) => varsOf(getEx(exId)).length ? logOf(exId, s.id, s.date)[0]?.vid || vidOf(getEx(exId)) : undefined;
 function placeholder(sug, i) {
   if (!sug) return {w: '', r: ''};
   const ls = sug.last.en.sets.filter(s => s.done);
@@ -630,21 +714,25 @@ function renderSession(s) {
 }
 function exerciseCard(s, en) {
   const ex = getEx(en.exId) || {name: 'Deleted exercise', groupId: ''};
-  const k = slot(en);
-  const sug = suggest(en.exId, k, s.id);
+  const k = slot(en), vars = varsOf(ex), vid = vars.length ? vidOf(ex, en.vid) : undefined;
+  const sug = getEx(en.exId) ? suggest(en.exId, k, s.id, vid) : null;
   let hint;
-  if (!sug) hint = `<div class="hint">First time logging this one — find a good working weight.</div>`;
+  if (!sug) hint = `<div class="hint">First time logging this one${vid ? ` (${esc(varName(ex, vid))})` : ''} — find a good working weight.</div>`;
   else {
-    const L = sug.last;
-    const lastLine = `<b>Last</b> · ${fmtDate(L.date)}${L.known ? ' as ' + ord(L.slot) : ''}: <span class="num">${esc(setsText(L.en.sets))}</span>`;
+    const L = sug.last, sk = sug.skipped[0];
+    // the newest session was an off day: say so, and offer to use it after all
+    const offLine = sk ? `<span class="offnote">${fmtDate(sk.x.date)}: <span class="num">${esc(setsText(sk.x.en.sets))}</span> — ${sk.why === 'marked' ? 'marked as off day' : 'below your usual, looks like an off day'}${sug.skipped.length > 1 ? ` (+${sug.skipped.length - 1} more)` : ''}, so not used.<button class="mini" data-act="off-set" data-s="${sk.x.s.id}" data-e="${sk.x.en.id}">${sk.why === 'marked' ? 'Use it' : 'It was fine'}</button></span>` : '';
+    const lastLine = `${offLine}<b>${sk ? 'Based on' : 'Last'}</b> · ${fmtDate(L.date)}${L.known ? ' as ' + ord(L.slot) : ''}: <span class="num">${esc(setsText(L.en.sets))}</span>`;
     let goal;
     if (sug.same) goal = `Beat it: ${fmt(sug.topW)} × ${sug.topR + 1}  <small>or ${fmt(sug.topW + sug.inc)} × ${sug.topR}</small>`;
     else {
       const pct = Math.round((sug.ratio - 1) * 100);
       goal = `Aim ~${fmt(sug.w)} × ${sug.r} <small>· ${ord(k)} today vs ${ord(L.slot)} last time (${pct > 0 ? '+' : ''}${pct}%)</small>`;
     }
-    hint = `<div class="hint" data-act="ex-hist" data-x="${en.exId}"><span class="more">History ›</span>${lastLine}<span class="goal">${goal}</span></div>`;
+    hint = `<div class="hint" data-act="ex-hist" data-x="${en.exId}" data-v="${vid || ''}"><span class="more">History ›</span>${lastLine}<span class="goal">${goal}</span></div>`;
   }
+  const chips = vars.length ? `<div class="vchips" role="group" aria-label="Variant">${vars.map(v => `<button class="vchip" data-act="variant" data-en="${en.id}" data-v="${v.id}" aria-pressed="${v.id === vid}">${esc(v.name)}</button>`).join('')}
+    <button class="vchip add" data-act="add-variant" data-x="${ex.id}" data-en="${en.id}" aria-label="Add variant">+</button></div>` : '';
   const lastNote = sug?.last.en.note;
   const rows = en.sets.map((st, i) => {
     const p = placeholder(sug, i);
@@ -665,12 +753,13 @@ function exerciseCard(s, en) {
         <h3>${esc(ex.name)}</h3>
         <div class="row">${ex.gym && ex.gym !== s.gym ? `<span class="chip gym">${esc(gymName(ex.gym))}</span>` : ''}<span class="slot">${known(en) ? `${ord(k)} ${esc(gName(ex.groupId).toLowerCase())} exercise` : 'order not noted'}</span></div>
       </div>
-      ${getEx(en.exId) ? `<button class="icon-btn" data-act="ex-hist" data-x="${en.exId}" aria-label="History and stats">${ICON.chart}</button>` : ''}
+      ${getEx(en.exId) ? `<button class="icon-btn" data-act="ex-hist" data-x="${en.exId}" data-v="${vid || ''}" aria-label="History and stats">${ICON.chart}</button>` : ''}
       <button class="icon-btn" data-act="ex-menu" data-en="${en.id}" aria-label="Options">${ICON.dots}</button>
     </div>
+    ${chips}
     ${hint}
     ${ex.notes ? `<div class="hint" style="margin-top:6px">📌 ${esc(ex.notes)}</div>` : ''}
-    ${photoStrip(en.exId, false)}
+    ${getEx(en.exId) ? photoStrip(en.exId, false, {gym: s.gym, vid}) : ''}
     <input class="note-in" data-act-input="note" data-en="${en.id}" value="${esc(en.note)}" placeholder="${lastNote ? 'Last time: ' + esc(lastNote) : 'Setup note (seat hole, grip…)'}">
     <div class="sets">
       <div class="set-h"><span>Set</span><span style="text-align:center">Prev</span><span style="text-align:center">kg</span><span></span><span style="text-align:center">Reps</span><span></span></div>
@@ -683,7 +772,7 @@ function exerciseCard(s, en) {
 function sessionCard(s) {
   const items = s.entries.slice().sort((a, b) => (a.pos || 0) - (b.pos || 0)).map(en => {
     const ex = getEx(en.exId);
-    return `<li><span class="n num">${en.pos || '?'}</span><span><b>${esc(ex?.name || 'Deleted')}</b>${en.pr ? '<span class="badge-pr">PR</span>' : ''}<br><span class="sets-t num">${esc(setsText(en.sets))}</span></span></li>`;
+    return `<li><span class="n num">${en.pos || '?'}</span><span><b>${esc(exLabel(ex, en.vid))}</b>${en.pr ? '<span class="badge-pr">PR</span>' : ''}${en.off === true ? offTag('marked') : ''}<br><span class="sets-t num">${esc(setsText(en.sets))}</span></span></li>`;
   }).join('');
   const groups = s.groups.length ? s.groups : [...new Set(s.entries.map(en => getEx(en.exId)?.groupId).filter(Boolean))];
   return `<button class="hcard" data-act="session" data-s="${s.id}">
@@ -716,10 +805,10 @@ function exRows() {
   const q = ui.exQuery.trim().toLowerCase();
   const list = db.exercises
     .filter(e => (ui.exGroup === 'all' || e.groupId === ui.exGroup) && (ui.viewGym === 'all' || !e.gym || e.gym === ui.viewGym) &&
-                 (!q || hits(e.name + ' ' + gymName(e.gym), q)))
+                 (!q || hits(e.name + ' ' + gymName(e.gym) + ' ' + varsOf(e).map(v => v.name).join(' '), q)))
     .sort(byRecent);
   const rows = list.map(e => { const last = lastDates()[e.id], top = lastTop(e.id); return `
-    <button class="row-item" data-act="detail" data-x="${e.id}">
+    <button class="row-item" data-act="detail" data-x="${e.id}">${listThumb(e)}
       <div class="grow"><div class="t">${esc(e.name)}</div>
         <div class="s">${[ui.exGroup === 'all' ? gName(e.groupId) : '', ui.viewGym === 'all' || !e.gym ? gymName(e.gym) : ''].filter(Boolean).map(esc).join(' · ')}</div></div>
       <div class="r">${last && top ? `${fmtDate(last)}<br><span class="num">${fmt(num(top.w))}×${top.r}</span>` : 'no data'}</div>
@@ -750,10 +839,10 @@ function chartSVG(h) {
   if (dense) dots.push(dots.splice(sel, 1)[0]);   // draw the tapped dot on top
   const xl = `<text class="axis" x="${X(0)}" y="${H - 6}" text-anchor="${pts.length === 1 ? 'middle' : 'start'}">${fmtDate(pts[0].x.date)}</text>` +
     (pts.length > 1 ? `<text class="axis" x="${X(pts.length - 1)}" y="${H - 6}" text-anchor="end">${fmtDate(pts[pts.length - 1].x.date)}</text>` : '');
-  const p = pts[Math.min(sel, pts.length - 1)];
+  const p = pts[Math.min(sel, pts.length - 1)], ex = getEx(p.x.en.exId);
   const adj = p.x.known && p.x.slot > 1 ? ` → <b class="num">${fmt(Math.round(p.y))} kg</b> adjusted for being ${ord(p.x.slot)}` : '';
   return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Strength trend">${grid}${line}${dots.join('')}${xl}</svg></div>
-    <div class="readout"><b>${fmtDate(p.x.date, true)}</b> · ${p.x.known ? ord(p.x.slot) + ' exercise' : 'order not noted'}<br><span class="num">${esc(setsText(p.x.en.sets))}</span><br>
+    <div class="readout"><b>${fmtDate(p.x.date, true)}</b> · ${p.x.known ? ord(p.x.slot) + ' exercise' : 'order not noted'}${varName(ex, p.x.vid) ? ' · ' + esc(varName(ex, p.x.vid)) : ''}${offTag(offOf(h).get(p.x.en))}<br><span class="num">${esc(setsText(p.x.en.sets))}</span><br>
     ${bw ? `Top set <b class="num">${p.x.top.r} reps</b>` : `Est. 1RM <b class="num">${fmt(Math.round(p.x.best))} kg</b>${adj}`}</div>`;
 }
 // headline numbers + how this exercise goes depending on its order in the workout
@@ -794,9 +883,10 @@ function exStats(h) {
     <table class="otable"><thead><tr><th>Done as</th><th style="text-align:right">Times</th><th style="text-align:right">Best (est.)</th><th style="text-align:right">Avg 1RM</th></tr></thead><tbody>${rows}</tbody></table>
     <p class="explain" style="margin:10px 0 0;font-size:13px">Your actual numbers, not adjusted — they also depend on when in your training history you did each slot. ${note}</p></div>`;
 }
-function recentRows(h) {
+function recentRows(h, all = h) {
+  const off = offOf(all), ex = h[0] && getEx(h[0].en.exId), mixed = new Set(h.map(x => x.vid)).size > 1;
   return h.map(x => `<div class="hrow">
-      <div class="l1"><span>${fmtDate(x.date, true)}${x.en.pr ? '<span class="badge-pr">PR</span>' : ''}</span><span class="ord">${x.known ? ord(x.slot) : '?'}</span></div>
+      <div class="l1"><span>${fmtDate(x.date, true)}${mixed ? ` <small style="color:var(--text-2)">· ${esc(varName(ex, x.vid))}</small>` : ''}${x.en.pr ? '<span class="badge-pr">PR</span>' : ''}${offTag(off.get(x.en))}</span><span class="ord">${x.known ? ord(x.slot) : '?'}</span></div>
       <div class="l2 num">${esc(setsText(x.en.sets))}</div>
       ${x.en.note ? `<div class="l3">${esc(x.en.note)}</div>` : ''}</div>`).join('');
 }
@@ -806,29 +896,30 @@ const chartCard = h => `<div class="card chart-card" style="margin-bottom:12px">
       ${chartSVG(h)}
     </div>`;
 // the history of one exercise in a sheet over the workout, so you never leave it
-function historySheet(exId, keepScroll) {
+function historySheet(exId, keepScroll, vid) {
   const ex = getEx(exId); if (!ex) return;
-  const h = logOf(exId, getActive()?.id);
+  if (!varsOf(ex).length) vid = undefined;
+  const h = logOf(exId, getActive()?.id, undefined, vid);
   const top = sheet.scrollTop;
-  openSheet(`<h3 style="margin-bottom:6px">${esc(ex.name)}</h3>
+  openSheet(`<h3 style="margin-bottom:6px">${esc(exLabel(ex, vid))}</h3>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"><span class="chip">${esc(gName(ex.groupId))}</span><span class="chip gym">${esc(gymName(ex.gym))}</span></div>
-    ${h.length ? exStats(h) + chartCard(h) + `<h2 style="margin-top:16px">Recent</h2><div class="card" style="padding:4px 16px">${recentRows(h.slice(0, 6))}</div>
-      ${h.length > 6 ? `<button class="btn block" style="margin-top:12px" data-act="detail" data-x="${ex.id}">All ${h.length} sessions</button>` : ''}`
+    ${h.length ? exStats(h) + chartCard(h) + `<h2 style="margin-top:16px">Recent</h2><div class="card" style="padding:4px 16px">${recentRows(h.slice(0, 6), h)}</div>
+      ${h.length > 6 ? `<button class="btn block" style="margin-top:12px" data-act="detail" data-x="${ex.id}" data-v="${vid || ''}">All ${h.length} sessions</button>` : ''}`
       : '<div class="empty">No history yet — today is the first entry.</div>'}
     ${h.length ? '<p class="explain" style="margin-top:12px;font-size:13px">* Adjusted as if it was your 1st exercise for the muscle, so days in different orders compare fairly.</p>' : ''}
     <button class="btn primary block" style="margin-top:12px" data-act="close-sheet">Back to workout</button>`);
-  ui.sheetEx = exId;
+  ui.sheetEx = exId; ui.sheetVid = vid;
   if (keepScroll) sheet.scrollTop = top;
 }
 // one page to show the physio: every current exercise with start → now and a mini chart
 const RESET = /harder|hårder|new version|now as|now with|replaces/i;
-const phSeries = it => it.log.filter(e => (e.v != null || e.w > 0) && (e.u || it.unit) === it.unit);
+const phSeries = (it, vid) => phLog(it, vid).filter(e => (e.v != null || e.w > 0) && (e.u || it.unit) === it.unit);
 const phY = log => { const byW = log.some(e => e.w > 0); return e => byW ? (num(e.w) || 0) : (num(e.v) || 0); };
 // "made harder" only restarts the count where the numbers actually dropped back
 const isReset = (log, i, y = phY(log)) => i > 0 && RESET.test(log[i].note || '') && y(log[i]) < y(log[i - 1]);
 const phStage = log => { let k = 0; log.forEach((e, i) => { if (isReset(log, i)) k = i; }); return k; };
-function phSpark(it) {
-  const log = phSeries(it); if (log.length < 2) return '';
+function phSpark(it, vid) {
+  const log = phSeries(it, vid); if (log.length < 2) return '';
   const byW = log.some(e => e.w > 0), y = e => byW ? (num(e.w) || 0) : (num(e.v) || 0);
   const W = 140, H = 40, P = 3, ys = log.map(y);
   const y0 = Math.min(...ys), y1 = Math.max(...ys), span = y1 - y0 || 1;
@@ -841,14 +932,17 @@ function phSpark(it) {
 function renderPhysioReport(pid) {
   const p = phProg(pid), g = db.settings.gym;
   if (!p) { ui.tab = 'train'; return renderPhysioStart(); }
-  const items = p.items.filter(it => phHere(it, g) && it.log.length);
+  // one card per exercise, or per variant (lying and seated hamstring curl have different weights)
+  const items = p.items.filter(it => phHere(it, g) && it.log.length)
+    .flatMap(it => varsOf(it).length ? varsOf(it).map(v => ({it, vid: v.id})).filter(c => phLog(c.it, c.vid).length) : [{it, vid: undefined}]);
   let steps = 0, longest = 0;
   const dates = [];
-  for (const it of items) {
-    longest = Math.max(longest, it.log.length);
-    let top = num(it.log[0].w) || 0;   // count new heaviest weights, not going back up after a lighter day
-    for (const e of it.log.slice(1)) if ((num(e.w) || 0) > top) { top = num(e.w); steps++; }
-    for (const e of it.log) if (e.sid) dates.push(e.date);
+  for (const {it, vid} of items) {
+    const log = phLog(it, vid);
+    longest = Math.max(longest, log.length);
+    let top = num(log[0].w) || 0;   // count new heaviest weights, not going back up after a lighter day
+    for (const e of log.slice(1)) if ((num(e.w) || 0) > top) { top = num(e.w); steps++; }
+    for (const e of log) if (e.sid) dates.push(e.date);
   }
   dates.sort();
   // what improved from the first to the latest entry: more weight, or the same weight for more reps/seconds
@@ -858,15 +952,15 @@ function renderPhysioReport(pid) {
     if (wb === wa && a.u === b.u && num(b.v) > num(a.v)) return `+${fmt(num(b.v) - num(a.v))} ${b.u === 'sec' ? 's' : 'reps'}`;
     return '';
   };
-  const cards = items.map(it => {
-    const ser = phSeries(it), k = phStage(ser), first = ser[k] || it.log[0], L = ser[ser.length - 1] || phLast(it), gain = gainOf(first, L);
+  const cards = items.map(({it, vid}) => {
+    const log = phLog(it, vid), ser = phSeries(it, vid), k = phStage(ser), first = ser[k] || log[0], L = ser[ser.length - 1] || log[log.length - 1], gain = gainOf(first, L);
     const stage = k ? ` <span style="color:var(--muted)">(#${first.n}, ${esc(first.note.split(' · ')[0].toLowerCase())})</span>` : '';
-    return `<button class="rep" data-act="ph-hist" data-x="${it.id}">
-      <div class="t">${esc(it.name)}</div>
+    return `<button class="rep" data-act="ph-hist" data-x="${it.id}" data-v="${vid || ''}">
+      <div class="t">${esc(exLabel(it, vid))}</div>
       <div class="now num">${esc(phText(L, true)) || '–'}</div>
       <div class="from num">start: ${esc(phText(first, true)) || '–'}${stage}</div>
-      ${phSpark(it)}
-      <div class="d num">${gain ? `<span class="gain">${esc(gain)}</span> · ` : ''}${it.log.length} sessions</div></button>`;
+      ${phSpark(it, vid)}
+      <div class="d num">${gain ? `<span class="gain">${esc(gain)}</span> · ` : ''}${log.length} sessions</div></button>`;
   }).join('');
   return `<button class="back" data-act="back">${ICON.back} ${ui.detailFrom === 'exercises' ? 'Progress' : 'Physio'}</button>
     <h1>${esc(p.name)} — progress</h1>
@@ -884,14 +978,19 @@ function renderDetail(id) {
   if (id === 'body') return renderBodyPhotos();
   const ex = getEx(id);
   if (!ex) { ui.tab = 'exercises'; return renderExercises(); }
-  const h = logOf(id);
+  const vars = varsOf(ex), vid = vars.some(v => v.id === ui.detailVid) ? ui.detailVid : undefined;
+  const h = logOf(id, undefined, undefined, vid);
   const rows = recentRows(h);
+  // variants: see them together (All) or one at a time
+  const chips = vars.length ? `<div class="vchips" role="group" aria-label="Variant">${[['', 'All'], ...vars.map(v => [v.id, v.name])].map(([v, n]) =>
+    `<button class="vchip" data-act="detail-var" data-v="${v}" aria-pressed="${(vid || '') === v}">${esc(n)}</button>`).join('')}</div>` : '';
   return `<button class="back" data-act="back">${ICON.back} ${ui.detailFrom === 'train' ? 'Workout' : 'Progress'}</button>
     <h1>${esc(ex.name)}</h1>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px"><span class="chip">${esc(gName(ex.groupId))}</span><span class="chip gym">${esc(gymName(ex.gym))}</span>
       <button class="chip chip-btn" data-act="edit-ex" data-x="${ex.id}">${ICON.edit} Edit</button></div>
     ${ex.notes ? `<p class="sub" style="margin:8px 0 0">📌 ${esc(ex.notes)}</p>` : ''}
-    ${photoStrip(ex.id, true)}
+    ${chips}
+    ${photoStrip(ex.id, true, {vid})}
     <div style="height:12px"></div>
     ${exStats(h)}
     ${h.length ? chartCard(h) : ''}
@@ -908,7 +1007,31 @@ const phProg = id => PH().programs.find(p => p.id === id);
 function phItem(id) { for (const p of PH().programs) { const it = p.items.find(x => x.id === id); if (it) return {p, it}; } return {}; }
 const phAt = (it, gym) => !it.gym || it.gym === gym;
 const phHere = (it, gym) => !it.retired && phAt(it, gym);
-const phLast = it => it.log[it.log.length - 1];
+// variants (e.g. hamstring curl: lying / seated): undefined = the item has none, or "all variants"
+const phVid = (it, v) => varsOf(it).length ? vidOf(it, v) : undefined;
+const phLog = (it, vid) => vid === undefined ? it.log : it.log.filter(e => vidOf(it, e.vid) === vid);
+const phLast = (it, vid) => { const l = phLog(it, vid); return l[l.length - 1]; };
+// the variant you did last time (what a new session starts with)
+const phLastVid = it => phVid(it, phLast(it)?.vid);
+// Off days in physio: the same weight for fewer reps/seconds than the last normal session (only sessions with a date,
+// i.e. logged in the app), or marked by you. Two in a row = the real level now. log oldest first; Map(entry -> why).
+function phOffFlags(log) {
+  const out = new Map(); let ok = null, pend = null;
+  for (const e of log) {
+    if (e.off === true) { out.set(e, 'marked'); continue; }
+    const low = e.off !== false && e.date && ok?.date && e.u === ok.u && num(e.w) === num(ok.w) && num(e.v) < num(ok.v) && dayGap(ok.date, e.date) <= OFF_GAP;
+    if (low && !pend) { out.set(e, 'auto'); pend = e; continue; }
+    if (low) out.delete(pend);
+    ok = e; pend = null;
+  }
+  return out;
+}
+// the newest session that wasn't an off day: next time builds on this one
+function phBase(it, vid) {
+  const l = phLog(it, vid), off = phOffFlags(l);
+  for (let i = l.length - 1; i >= 0; i--) if (!off.has(l[i])) return l[i];
+  return l[l.length - 1];
+}
 // "22 kg × 8 reps", "5 kg × 30 s", "60 s"
 function phText(e, short) {
   if (!e) return '';
@@ -926,14 +1049,14 @@ function ruleText(it) {
   return it.lo && it.hi ? `${fmt(it.lo)}–${fmt(it.hi)} reps, then +${fmt(it.step)} kg` : 'add a rep each time';
 }
 // one step on from last time: +1 rep / +5 s, or at the top of the range add weight and start again at the bottom
-function phNext(it) {
-  const L = phLast(it); if (!L) return null;
+function phNext(it, vid) {
+  const L = phBase(it, vid); if (!L) return null;
   const w = num(L.w) || 0;
   if (L.u !== it.unit || L.v == null) return {w, v: it.lo || (it.unit === 'sec' ? 30 : 8), u: it.unit};
   if (it.lo && it.hi && L.v >= it.hi && it.step > 0) return {w: w + it.step, v: it.lo, u: it.unit, up: true};
   return {w, v: L.v + (it.unit === 'sec' ? 5 : 1), u: it.unit};
 }
-const phSets = it => [...it.log].reverse().find(e => e.sets)?.sets || 3;
+const phSets = (it, vid) => [...phLog(it, vid)].reverse().find(e => e.sets)?.sets || 3;
 // one row per set, each with its own kg and reps/seconds. Sessions started before this had one row plus a "sets" count.
 function phRows(en, it) {
   if (!en.rows) {
@@ -956,7 +1079,7 @@ function phPlaceW(rows, j, nx) {
 }
 // refresh the weight hints of one exercise's set rows
 function phHints(box, en) {
-  const nx = phNext(phItem(en.itemId).it);
+  const it = phItem(en.itemId).it, nx = phNext(it, phVid(it, en.vid));
   box.querySelectorAll('.pset-row').forEach(o => { o.querySelector('[data-pf="w"]').placeholder = phPlaceW(en.rows, +o.dataset.i, nx); });
 }
 // the physio's shoulder press ("only at the bottom") was logged as a gym exercise in Keep; give it its own physio entry
@@ -978,14 +1101,33 @@ function addPhysioPress() {
   }
   db.physioPress = true; save();
 }
+// v5: the Gym80 shoulder press is done first in the shoulder program; hamstring curl (lying or seated) joins the legs program
+function physioV5() {
+  const sh = phProg('nicklas-shoulders'), legs = phProg('nicklas-legs');
+  if (db.physioV5 || readOnly || !sh || !legs) return;   // programs not imported yet: runs again after the import
+  const i = sh.items.findIndex(it => it.id === 'shoulder-press');
+  if (i > 0) sh.items.unshift(sh.items.splice(i, 1)[0]);
+  if (!legs.items.some(it => it.id === 'hamstring-curl'))
+    legs.items.push({id: 'hamstring-curl', name: 'Hamstring curl', gym: '', unit: 'reps', lo: 8, hi: 12, step: 5, notes: '', log: [],
+      variants: [{id: 'lying', name: 'Lying', img: 'Lying_Leg_Curls'}, {id: 'seated', name: 'Seated', img: 'Seated_Leg_Curl'}]});
+  db.physioV5 = true; save();
+}
+// give exercises their standard picture (only ones that never had one, so a removed or changed picture stays that way)
+function applyPics() {
+  if (readOnly) return;
+  let n = 0;
+  for (const e of db.exercises) { const id = PIC_GYM[e.name.replace(/\s*\((Manna|Hals|FW|Greece)\)$/, '')]; if (e.img === undefined && id) { e.img = id; n++; } }
+  for (const p of PH().programs) for (const it of p.items) if (it.img === undefined && PIC_PH[it.id]) { it.img = PIC_PH[it.id]; n++; }
+  if (n) save();
+}
 function phLastDate(p) { let d = null; for (const it of p.items) for (const e of it.log) if (e.date && (!d || e.date > d)) d = e.date; return d; }
 
 function renderPhysioStart() {
   const gym = db.settings.gym;
   const cards = PH().programs.map(p => {
     const items = p.items.filter(it => phHere(it, gym)), ld = phLastDate(p);
-    const rows = items.map(it => { const L = phLast(it), nx = phNext(it); return `<button class="row-item" data-act="ph-hist" data-x="${it.id}">
-        <div class="grow"><div class="t">${esc(it.name)}</div><div class="s num">${L ? `#${L.n} · ${esc(phText(L, true))}` : 'not logged yet'}</div></div>
+    const rows = items.map(it => { const v = phLastVid(it), L = phLast(it, v), nx = phNext(it, v); return `<button class="row-item" data-act="ph-hist" data-x="${it.id}">
+        <div class="grow"><div class="t">${esc(exLabel(it, v))}</div><div class="s num">${L ? `#${L.n} · ${esc(phText(L, true))}` : 'not logged yet'}</div></div>
         ${nx ? `<div class="r num" style="color:var(--accent);font-weight:700">→ ${esc(phText(nx, true))}</div>` : ''}</button>`; }).join('');
     return `<div class="card ph-card">
       <div class="ph-top"><div><h3>${esc(p.name)}</h3><div class="s">${p.by ? 'From ' + esc(p.by) + ' · ' : ''}${ld ? 'last done ' + agoText(ld) : 'history from Keep'}</div></div>
@@ -1002,25 +1144,36 @@ function renderPhysioStart() {
 function phStart(pid) {
   const p = phProg(pid), gym = db.settings.gym; if (!p) return;
   if (getActive()) { toast('Finish the gym workout first'); return; }
-  PH().active = {id: uid(), progId: p.id, date: today(), gym, start: Date.now(),
-    entries: p.items.filter(it => phHere(it, gym)).map(it => ({itemId: it.id, note: '', rows: Array.from({length: phSets(it)}, () => ({w: '', v: '', done: false}))}))};
+  PH().active = {id: uid(), progId: p.id, date: today(), gym, start: Date.now(), entries: p.items.filter(it => phHere(it, gym)).map(phNewEntry)};
   save(); render(); window.scrollTo(0, 0);
+}
+// a session entry for one physio exercise: the variant done last time, as many sets as last time
+function phNewEntry(it) {
+  const vid = phLastVid(it), en = {itemId: it.id, note: '', rows: Array.from({length: phSets(it, vid)}, () => ({w: '', v: '', done: false}))};
+  if (vid) en.vid = vid;
+  return en;
 }
 function renderPhysioSession(a) {
   const p = phProg(a.progId);
   const cards = a.entries.map((en, i) => {
     const {it} = phItem(en.itemId); if (!it) return '';
-    const L = phLast(it), nx = phNext(it), unit = it.unit === 'sec' ? 'Seconds' : 'Reps', rows = phRows(en, it);
-    const hint = L ? `<div class="hint" data-act="ph-hist" data-x="${it.id}"><span class="more">History ›</span><b>Last</b> · #${L.n}${L.date ? ' · ' + fmtDate(L.date) : ''}: <span class="num">${esc(phText(L))}</span>
+    const vid = phVid(it, en.vid), log = phLog(it, vid), L = phBase(it, vid), last = log[log.length - 1], nx = phNext(it, vid);
+    const unit = it.unit === 'sec' ? 'Seconds' : 'Reps', rows = phRows(en, it);
+    // the newest session was an off day: next is built on the one before
+    const offWhyL = last && last !== L ? phOffFlags(log).get(last) : null;
+    const offLine = offWhyL ? `<span class="offnote">#${last.n}: <span class="num">${esc(phText(last))}</span> — ${offWhyL === 'marked' ? 'marked as off day' : 'fewer than the time before, looks like an off day'}, so not used.<button class="mini" data-act="ph-off" data-x="${it.id}" data-n="${last.n}" data-s="${last.sid || ''}" data-v="0">${offWhyL === 'marked' ? 'Use it' : 'It was fine'}</button></span>` : '';
+    const hint = L ? `<div class="hint" data-act="ph-hist" data-x="${it.id}" data-v="${vid || ''}"><span class="more">History ›</span>${offLine}<b>${offLine ? 'Based on' : 'Last'}</b> · #${L.n}${L.date ? ' · ' + fmtDate(L.date) : ''}: <span class="num">${esc(phText(L))}</span>
         <span class="goal">${nx.up ? 'Level up: ' : 'Next: '}${esc(phText(nx))} <small>· ${esc(ruleText(it))}</small></span></div>`
-      : `<div class="hint">First time — ${esc(ruleText(it))}.</div>`;
+      : `<div class="hint">First time${vid ? ` (${esc(varName(it, vid))})` : ''} — ${esc(ruleText(it))}.</div>`;
+    const chips = vid ? `<div class="vchips" role="group" aria-label="Variant">${varsOf(it).map(v => `<button class="vchip" data-act="ph-variant" data-x="${it.id}" data-v="${v.id}" aria-pressed="${v.id === vid}">${esc(v.name)}</button>`).join('')}</div>` : '';
     return `<article class="ex-card" id="pcard-${it.id}">
       <div class="ex-head"><div class="pos num">${i + 1}</div>
-        <div class="ex-title"><h3>${esc(it.name)}</h3><div class="row"><span class="slot">Session #${(L?.n || 0) + 1}</span></div></div>
-        <button class="icon-btn" data-act="ph-hist" data-x="${it.id}" aria-label="History">${ICON.chart}</button></div>
+        <div class="ex-title"><h3>${esc(it.name)}</h3><div class="row"><span class="slot">Session #${(phLast(it)?.n || 0) + 1}</span></div></div>
+        <button class="icon-btn" data-act="ph-hist" data-x="${it.id}" data-v="${vid || ''}" aria-label="History">${ICON.chart}</button></div>
+      ${chips}
       ${hint}
       ${it.notes ? `<div class="hint" style="margin-top:6px">📌 ${esc(it.notes)}</div>` : ''}
-      ${photoStrip('ph:' + it.id, false)}
+      ${photoStrip('ph:' + it.id, false, {gym: a.gym, vid})}
       <input class="note-in" data-act-input="ph-note" data-x="${it.id}" value="${esc(en.note)}" placeholder="${L?.note ? 'Last time: ' + esc(L.note) : 'Note (how it felt, pain…)'}">
       <div class="sets">
         <div class="set-h pset-h"><span>Set</span><span>kg</span><span></span><span>${unit}</span><span></span></div>
@@ -1038,7 +1191,8 @@ function renderPhysioSession(a) {
       <button class="btn primary small" data-act="ph-finish">Finish</button></div>
     ${p?.note ? `<div class="hint" style="margin:0 0 12px">📌 ${esc(p.note)}</div>` : ''}
     ${cards}
-    <p class="explain" style="text-align:center">Only ticked exercises are saved — skip any you don't do today.</p>
+    <button class="add-ex" data-act="ph-add-ex">${ICON.plus} Add exercise</button>
+    <p class="explain" style="text-align:center;margin-top:14px">Only ticked exercises are saved — skip any you don't do today.</p>
     <div style="text-align:center;margin-top:6px"><button class="link" data-act="ph-discard">Discard session</button></div>`;
 }
 function phFinish(force) {
@@ -1055,20 +1209,36 @@ function phFinish(force) {
     // a heavier set that stopped below the bottom of the range (e.g. 60×4 tried after 55×12) doesn't count as the new level
     const fair = it.lo ? sets.filter(s => s.v >= it.lo) : sets;
     const top = (fair.length ? fair : sets).reduce((b, s) => s.w > b.w || (s.w === b.w && s.v > b.v) ? s : b);
-    const L = phLast(it);
+    const vid = phVid(it, en.vid), L = phLast(it), B = phBase(it, vid);
     const e = {n: (L?.n || 0) + 1, w: top.w, v: top.v, u: it.unit, date: a.date, gym: a.gym, sid: a.id, sets: sets.length};
+    if (vid) e.vid = vid;
     if (sets.some(s => s.w !== top.w || s.v !== top.v)) e.list = sets;
     if (en.note.trim()) e.note = en.note.trim();
-    it.log.push(e); out.push({it, e, up: L && e.w > (num(L.w) || 0)});
+    it.log.push(e); out.push({it, e, up: B && e.w > (num(B.w) || 0)});
   }
   if (!out.length) { toast('Tick off at least one exercise first'); return; }
   PH().active = null; db.rest = null; save(); render(); renderRest();
-  openSheet(`<h3>Physio done 💪</h3><div class="pr-list">${out.map(o => `<div class="row-item">${o.up ? '<span class="badge-pr" style="margin:0">UP</span>' : ''}
-      <div class="grow"><div class="t">${esc(o.it.name)}</div><div class="s num">#${o.e.n} · ${esc(phText(o.e))}</div></div></div>`).join('')}</div>
+  // each exercise can be marked as an off day here (a low one is spotted on its own)
+  openSheet(`<h3>Physio done 💪</h3><div class="pr-list offlist">${out.map(o => {
+      const why = phOffFlags(phLog(o.it, phVid(o.it, o.e.vid))).get(o.e);
+      return `<div class="row-item">${o.up ? '<span class="badge-pr" style="margin:0">UP</span>' : ''}
+      <div class="grow"><div class="t">${esc(exLabel(o.it, o.e.vid))}</div><div class="s num">#${o.e.n} · ${esc(phText(o.e))}</div>
+        ${why === 'auto' ? '<div class="s">Fewer than last time — next time builds on the session before.</div>' : ''}</div>
+      <button class="mini" data-act="ph-off" data-x="${o.it.id}" data-n="${o.e.n}" data-s="${o.e.sid}" data-v="${why === 'auto' ? '0' : '1'}">${why === 'auto' ? 'It was fine' : 'Off day'}</button></div>`; }).join('')}</div>
     <button class="btn primary block" style="margin-top:8px" data-act="close-sheet">Nice</button>`);
 }
-function phChart(it) {
-  const log = it.log; if (!log.length) return '';
+// add a program exercise (another gym's, an old version) or a new one to today's session
+function phAddSheet() {
+  const a = PH().active, p = a && phProg(a.progId); if (!p) return;
+  const have = new Set(a.entries.map(en => en.itemId)), rest = p.items.filter(it => !have.has(it.id));
+  openSheet(`<h3>Add exercise</h3>
+    ${rest.length ? `<div class="list">${rest.map(it => `<button class="row-item" data-act="ph-add-to" data-x="${it.id}">${listThumb(it)}<div class="grow"><div class="t">${esc(it.name)}</div>
+      <div class="s">${[it.gym ? gymName(it.gym) : 'Any gym', it.retired ? 'old version' : '', `${it.log.length} sessions`].filter(Boolean).map(esc).join(' · ')}</div></div>${ICON.plus.replace('<svg', '<svg class="chev"')}</button>`).join('')}</div>`
+      : '<p class="explain">Every exercise in this program is already in today\'s session.</p>'}
+    <button class="btn block" style="margin-top:12px" data-act="ph-new" data-p="${p.id}" data-from="session">${ICON.plus} New exercise in ${esc(p.name)}</button>`);
+}
+function phChart(log) {
+  if (!log.length) return '';
   const byW = log.some(e => e.w > 0), y = e => byW ? (num(e.w) || 0) : (num(e.v) || 0);
   const W = 340, H = 170, L = 36, R = 16, T = 14, B = 26;
   let y0 = Math.min(...log.map(y)), y1 = Math.max(...log.map(y));
@@ -1090,52 +1260,74 @@ function phChart(it) {
   return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Progress">${grid}${line}${dots.join('')}${xl}</svg></div>
     <div class="readout"><b>#${e.n}</b> · ${e.date ? fmtDate(e.date, true) : 'from Keep'} · <span class="num">${esc(phText(e))}</span>${e.note ? `<br><i>${esc(e.note)}</i>` : ''}</div>`;
 }
-function physioSheet(id, keepScroll) {
+function physioSheet(id, keepScroll, vid) {
   const {p, it} = phItem(id); if (!it) return;
-  const top = sheet.scrollTop, log = it.log, L = phLast(it), nx = phNext(it);
+  if (!varsOf(it).some(v => v.id === vid)) vid = undefined;   // undefined = all variants together
+  const top = sheet.scrollTop, log = phLog(it, vid), L = log[log.length - 1], nx = phNext(it, vid ?? phLastVid(it));
   const first = log.find(e => e.w > 0), dated = log.filter(e => e.sid).length;
   const recent = log.slice().reverse().slice(0, ui.phAll ? log.length : 8);
-  const byW = log.some(e => e.w > 0);
+  const byW = log.some(e => e.w > 0), off = new Map();
+  for (const v of vid === undefined && varsOf(it).length ? varsOf(it).map(x => x.id) : [vid]) for (const [e, why] of phOffFlags(phLog(it, v))) off.set(e, why);
+  const mixed = vid === undefined && varsOf(it).length > 0;
+  const chips = varsOf(it).length ? `<div class="vchips" style="margin:0 0 12px" role="group" aria-label="Variant">${[['', 'All'], ...varsOf(it).map(v => [v.id, v.name])].map(([v, n]) =>
+    `<button class="vchip" data-act="ph-hist-var" data-x="${it.id}" data-v="${v}" aria-pressed="${(vid || '') === v}">${esc(n)}</button>`).join('')}</div>` : '';
   openSheet(`<h3 style="margin-bottom:6px">${esc(it.name)}</h3>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"><span class="chip">${esc(p.name)}</span>${it.gym ? `<span class="chip gym">${esc(gymName(it.gym))}</span>` : ''}${it.retired ? '<span class="chip">Old version</span>' : ''}<span class="chip">${esc(ruleText(it))}</span></div>
+    ${chips}
     ${it.notes ? `<p class="explain" style="margin:0 0 12px">📌 ${esc(it.notes)}</p>` : ''}
-    <div style="margin:-6px 0 12px">${photoStrip('ph:' + it.id, true)}</div>
+    <div style="margin:-6px 0 12px">${photoStrip('ph:' + it.id, true, {vid})}</div>
     ${log.length ? `<div class="stats two">
         <div class="stat"><div class="k">Sessions</div><div class="v num">${log.length}</div><div class="d">${dated ? dated + ' logged in the app' : 'all from Keep'}</div></div>
         <div class="stat"><div class="k">Last</div><div class="v num" style="font-size:19px">${esc(phText(L, true)) || '–'}</div><div class="d">#${L.n}${L.date ? ' · ' + fmtDate(L.date) : ''}</div></div>
         ${first && L.w > 0 ? `<div class="stat"><div class="k">Weight</div><div class="v num">${fmt(first.w)}→${fmt(L.w)}<small> kg</small></div><div class="d">since #${first.n}</div></div>` : ''}
-        ${nx && !it.retired ? `<div class="stat"><div class="k">Next</div><div class="v num" style="font-size:19px;color:var(--accent)">${esc(phText(nx, true))}</div><div class="d">${nx.up ? 'level up' : 'one step on'}</div></div>` : ''}
+        ${nx && !it.retired ? `<div class="stat"><div class="k">Next${mixed ? ' · ' + esc(varName(it, phLastVid(it))) : ''}</div><div class="v num" style="font-size:19px;color:var(--accent)">${esc(phText(nx, true))}</div><div class="d">${nx.up ? 'level up' : 'one step on'}</div></div>` : ''}
       </div>
       <div class="card chart-card" style="margin-bottom:12px"><div class="ct">Progress</div>
-        <div class="cs">${byW ? 'Weight' : it.unit === 'sec' ? 'Seconds' : 'Reps'} per session. Tap a point to see that session.</div>${phChart(it)}</div>
+        <div class="cs">${byW ? 'Weight' : it.unit === 'sec' ? 'Seconds' : 'Reps'} per session. Tap a point to see that session.</div>${phChart(log)}</div>
       <h2 style="margin-top:16px">Log</h2>
-      <div class="card" style="padding:4px 16px">${recent.map(e => `<div class="hrow"><div class="l1"><span>#${e.n}${e.date ? ' · ' + fmtDate(e.date, true) : ''}</span>${e.gym && !it.gym ? `<span class="ord">${esc(gymName(e.gym))}</span>` : ''}</div>
+      <div class="card" style="padding:4px 16px">${recent.map(e => `<div class="hrow"><div class="l1"><span>#${e.n}${e.date ? ' · ' + fmtDate(e.date, true) : ''}${mixed ? ` <small style="color:var(--text-2)">· ${esc(varName(it, e.vid))}</small>` : ''}${offTag(off.get(e))}</span>
+          <span>${e.gym && !it.gym ? `<span class="ord">${esc(gymName(e.gym))}</span>` : ''}${e.date ? `<button class="mini" data-act="ph-off" data-x="${it.id}" data-n="${e.n}" data-s="${e.sid || ''}" data-v="${off.get(e) === 'auto' ? '0' : '1'}">${off.get(e) === 'auto' ? 'It was fine' : e.off === true ? 'Not off' : 'Off day'}</button>` : ''}</span></div>
         <div class="l2 num">${esc(phText(e)) || '–'}</div>${e.note ? `<div class="l3">${esc(e.note)}</div>` : ''}</div>`).join('')}</div>
       ${log.length > recent.length ? `<button class="btn block" style="margin-top:12px" data-act="ph-all" data-x="${it.id}">Show all ${log.length}</button>` : ''}`
     : '<div class="empty">No sessions yet.</div>'}
     <div style="display:flex;gap:8px;margin-top:12px"><button class="btn block" data-act="ph-edit" data-x="${it.id}">${ICON.edit} Edit</button>
       <button class="btn primary block" data-act="close-sheet">${PH().active ? 'Back to session' : 'Close'}</button></div>`);
-  ui.sheetPh = id;
+  ui.sheetPh = id; ui.sheetPhVid = vid;
   if (keepScroll) sheet.scrollTop = top;
 }
-function phProgSheet(pid) {
+function phProgSheet(pid, keepScroll) {
   const p = phProg(pid); if (!p) return;
+  const top = sheet.scrollTop;
   openSheet(`<h3>${esc(p.name)}</h3>
     <label class="field"><span>Program name</span><input data-act-input="ph-pname" data-p="${p.id}" value="${esc(p.name)}"></label>
     <label class="field"><span>Note from your physio</span><textarea data-act-input="ph-pnote" data-p="${p.id}" rows="3">${esc(p.note)}</textarea></label>
+    <p class="explain" style="font-size:13px;margin:0">The arrows set the order of the exercises in a session. Tap an exercise to change it (rule, variants, old version…).</p>
     ${[[`Exercises at ${gymName(db.settings.gym)}`, p.items.filter(it => phAt(it, db.settings.gym))], ['Other gyms', p.items.filter(it => !phAt(it, db.settings.gym))]]
       .filter(([, list]) => list.length).map(([title, list]) => `<div class="pick-sec">${esc(title)}</div>
-    <div class="list">${list.map(it => `<button class="row-item" data-act="ph-edit" data-x="${it.id}"><div class="grow"><div class="t">${esc(it.name)}</div>
-      <div class="s">${[it.gym ? gymName(it.gym) : 'Any gym', it.retired ? 'old version' : '', `${it.log.length} sessions`].filter(Boolean).map(esc).join(' · ')}</div></div>${ICON.edit.replace('<svg', '<svg class="chev"')}</button>`).join('')}</div>`).join('')}
+    <div class="list">${list.map((it, i) => `<div class="row-item prow"><button class="grow" data-act="ph-edit" data-x="${it.id}"><div class="t">${esc(it.name)}</div>
+      <div class="s">${[it.gym ? gymName(it.gym) : 'Any gym', varsOf(it).map(v => v.name).join(' / '), it.retired ? 'old version' : '', `${it.log.length} sessions`].filter(Boolean).map(esc).join(' · ')}</div></button>
+      <button class="icon-btn" data-act="ph-move" data-x="${it.id}" data-d="-1" aria-label="Move up" ${i ? '' : 'disabled style="opacity:.25"'}>${ICON.up}</button>
+      <button class="icon-btn" data-act="ph-move" data-x="${it.id}" data-d="1" aria-label="Move down" ${i < list.length - 1 ? '' : 'disabled style="opacity:.25"'}>${ICON.down}</button></div>`).join('')}</div>`).join('')}
     <button class="btn block" style="margin-top:12px" data-act="ph-new" data-p="${p.id}">${ICON.plus} Add exercise</button>
     <button class="btn primary block" style="margin-top:8px" data-act="close-sheet">Done</button>`);
+  if (keepScroll) sheet.scrollTop = top;
 }
-function phEditForm(id, pid) {
+// move a physio exercise up/down among the ones shown in the same list (this gym / other gyms)
+function phMove(id, d) {
+  const {p, it} = phItem(id); if (!it) return;
+  const g = db.settings.gym, same = p.items.filter(x => phAt(x, g) === phAt(it, g)), j = same.indexOf(it) + d;
+  if (j < 0 || j >= same.length) return;
+  const a = p.items.indexOf(it), b = p.items.indexOf(same[j]);
+  [p.items[a], p.items[b]] = [p.items[b], p.items[a]];
+  save(); ui.redraw = true; phProgSheet(p.id, true);
+}
+function phEditForm(id, pid, from) {
   const {p, it} = id ? phItem(id) : {p: phProg(pid), it: null}; if (!p) return;
   const v = (k, d) => esc(it ? (it[k] ?? '') : d);
   openSheet(`<h3>${it ? 'Edit physio exercise' : 'New physio exercise'}</h3>
-    <form id="phForm" data-x="${it?.id || ''}" data-p="${p.id}">
+    <form id="phForm" data-x="${it?.id || ''}" data-p="${p.id}" data-from="${from || ''}">
       <label class="field"><span>Name</span><input name="name" required value="${v('name', '')}"></label>
+      ${variantField(it, 'e.g. Lying, Seated')}
       <label class="field"><span>Gym</span><select name="gym">${[['', 'Any gym'], ...GYMS].map(([g, n]) => `<option value="${g}" ${(it ? it.gym || '' : '') === g ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       <label class="field"><span>Measured in</span><select name="unit"><option value="reps" ${it?.unit !== 'sec' ? 'selected' : ''}>Reps</option><option value="sec" ${it?.unit === 'sec' ? 'selected' : ''}>Seconds (holds)</option></select></label>
       <div class="field"><span>Progression rule</span><div class="trip" style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:4px"><div>From</div><div>To</div><div>Then + kg</div></div><div class="trip">
@@ -1161,11 +1353,11 @@ function renderPhysioHistory() {
     <p class="sub">${list.length} session${list.length === 1 ? '' : 's'} at ${esc(gymName(db.settings.gym))} logged in the app. The Keep history has no dates — open an exercise under Progress to see it.</p>
     <div class="list">${list.map(x => `<div class="hcard"><div class="top-line"><span class="date">${fmtDate(x.date, true)} <small style="color:var(--muted);font-weight:600">· ${esc(gymName(x.gym))}</small></span>
         <span style="display:flex;gap:4px;align-items:center"><span class="chip">${esc(x.p.name)}</span><button class="icon-btn" style="width:32px;height:32px" data-act="ph-sdel" data-s="${x.sid}" aria-label="Delete session">${ICON.trash}</button></span></div>
-      <ol>${x.rows.map((r, i) => `<li><span class="n num">${i + 1}</span><span><b>${esc(r.it.name)}</b><br><span class="sets-t num">#${r.e.n} · ${esc(phText(r.e))}</span></span></li>`).join('')}</ol></div>`).join('')
+      <ol>${x.rows.map((r, i) => `<li><span class="n num">${i + 1}</span><span><b>${esc(exLabel(r.it, r.e.vid))}</b>${r.e.off === true ? offTag('marked') : ''}<br><span class="sets-t num">#${r.e.n} · ${esc(phText(r.e))}</span></span></li>`).join('')}</ol></div>`).join('')
       || `<div class="empty">No physio sessions at ${esc(gymName(db.settings.gym))} logged in the app yet.</div>`}</div>`;
 }
 function renderPhysioProgress() {
-  const row = it => { const L = phLast(it); return `<button class="row-item" data-act="ph-hist" data-x="${it.id}">
+  const row = it => { const L = phLast(it); return `<button class="row-item" data-act="ph-hist" data-x="${it.id}">${listThumb(it)}
       <div class="grow"><div class="t">${esc(it.name)}</div><div class="s">${[it.retired ? 'old version' : '', `${it.log.length} sessions`].filter(Boolean).map(esc).join(' · ')}</div></div>
       <div class="r num">${L ? `#${L.n}<br>${esc(phText(L, true))}` : 'no data'}</div>${ICON.chev}</button>`; };
   const g = db.settings.gym;
@@ -1187,7 +1379,7 @@ async function importPhysio() {
   if (!data || !Array.isArray(data.programs) || !data.programs.every(p => p && p.id && Array.isArray(p.items) && p.items.every(it => it && it.id && Array.isArray(it.log)))) return;
   const have = new Set(PH().programs.map(p => p.id));
   PH().programs.push(...data.programs.filter(p => !have.has(p.id)));
-  db.physioV1 = true; save(); addPhysioPress();
+  db.physioV1 = true; save(); addPhysioPress(); physioV5(); applyPics();
   if (!getActive() && !PH().active && !ui.sheetOpen && ui.tab !== 'detail') render();
   toast('Physio programs added — switch to Physio on the Train tab');
 }
@@ -1242,7 +1434,7 @@ async function addPhoto(owner, file) {
     // decode once and make both sizes from it, one after the other (a 200 MP photo takes ~800 MB decoded)
     const full = await shrink(bmp, 1600, 0.82), thumb = await shrink(bmp, 360, 0.72);
     bmp.close?.(); bmp = null;
-    const p = {id: uid(), owner, date: await photoDay(file), t: Date.now()};
+    const p = {id: uid(), owner, date: await photoDay(file), t: Date.now(), gym: ui.photoGym || db.settings.gym};
     await idbTx(['photos', 'full'], 'readwrite', tx => { tx.objectStore('photos').put({...p, thumb}); tx.objectStore('full').put({id: p.id, blob: full}); });
     photos.unshift(p); photos.sort((a, b) => b.date.localeCompare(a.date) || b.t - a.t); thumbURL[p.id] = URL.createObjectURL(thumb);
     toast('Photo saved'); photoRefresh();
@@ -1255,6 +1447,14 @@ async function delPhotosOf(test) {
   photos = photos.filter(p => !ids.includes(p.id));
   ids.forEach(id => { if (thumbURL[id]) URL.revokeObjectURL(thumbURL[id]); delete thumbURL[id]; });
 }
+// give another exercise the photos of this one (when two exercises are merged)
+async function movePhotos(from, to) {
+  const list = photos.filter(p => p.owner === from); if (!list.length) return;
+  try {
+    await idbTx(['photos'], 'readwrite', tx => { const st = tx.objectStore('photos'); list.forEach(p => { const r = st.get(p.id); r.onsuccess = () => { if (r.result) st.put({...r.result, owner: to}); }; }); });
+    list.forEach(p => { p.owner = to; }); photoRefresh();
+  } catch (e) {}
+}
 async function delPhoto(id) {
   try { await idbTx(['photos', 'full'], 'readwrite', tx => { tx.objectStore('photos').delete(id); tx.objectStore('full').delete(id); }); }
   catch (e) { toast("Couldn't delete the photo"); return; }
@@ -1266,21 +1466,93 @@ async function delPhoto(id) {
 // redraw whatever shows photos right now
 function photoRefresh() {
   if (ui.sheetOpen) ui.redraw = true;   // the page under the sheet is redrawn when it closes
-  if (ui.sheetOpen && ui.sheetPh) physioSheet(ui.sheetPh, true);
+  if (ui.sheetOpen && ui.sheetPh) physioSheet(ui.sheetPh, true, ui.sheetPhVid);
   else if (!ui.sheetOpen) render();
 }
-// a row of thumbnails (+ a camera button to add one)
-function photoStrip(owner, canAdd) {
-  const th = photos.filter(p => p.owner === owner).map(p => `<button class="pthumb" data-act="photo" data-id="${p.id}" aria-label="Photo from ${fmtDate(p.date)}"><img src="${thumbURL[p.id] || ''}" alt=""></button>`).join('');
-  if (!th && !canAdd) return '';
-  return `<div class="pstrip">${th}${canAdd ? `<button class="pthumb" data-act="add-photo" data-o="${esc(owner)}" aria-label="Add photo">${ICON.camera}</button>` : ''}</div>`;
+// the gym exercise ('<id>') or physio exercise ('ph:<id>') that photos and pictures belong to
+const ownerObj = o => String(o).startsWith('ph:') ? phItem(o.slice(3)).it : getEx(o);
+const GYM_SHORT = {aalborg: 'Aal', bronderslev: 'Brø', klarup: 'Kla', other: 'Oth'};
+// A row of thumbnails: the standard picture first, then your photos (+ camera button). opts.gym: during a session,
+// only that gym's photos (machines differ between gyms); opts.vid: the variant whose standard picture to show.
+function photoStrip(owner, canAdd, opts = {}) {
+  const x = ownerObj(owner), rv = varsOf(x).length ? vidOf(x, opts.vid) : '', pic = picOf(x, rv), anyGym = x && !x.gym;
+  const mine = photos.filter(p => p.owner === owner && (!opts.gym || !p.gym || p.gym === opts.gym));
+  const std = pic ? `<button class="pthumb stock" data-act="pic" data-o="${esc(owner)}" data-v="${rv}" aria-label="Standard picture"><img src="${picURL(pic)}" alt="" loading="lazy" ${PIC_HERE.has(pic) ? '' : 'crossorigin="anonymous"'}><span class="tag">how-to</span></button>`
+    : canAdd && x ? `<button class="pthumb" data-act="pic-choose" data-o="${esc(owner)}" data-v="${rv}" aria-label="Pick a standard picture">${ICON.image}</button>` : '';
+  const th = mine.map(p => `<button class="pthumb" data-act="photo" data-id="${p.id}" aria-label="Photo from ${fmtDate(p.date)}"><img src="${thumbURL[p.id] || ''}" alt="">${anyGym && p.gym && !opts.gym ? `<span class="tag">${GYM_SHORT[p.gym] || ''}</span>` : ''}</button>`).join('');
+  if (!std && !th && !canAdd) return '';
+  return `<div class="pstrip">${std}${th}${canAdd ? `<button class="pthumb" data-act="add-photo" data-o="${esc(owner)}" aria-label="Add photo">${ICON.camera}</button>` : ''}</div>`;
+}
+// small picture at the start of a list row
+const listThumb = (x, vid) => { const pic = picOf(x, vid); return pic ? `<img class="lthumb" src="${picURL(pic)}" alt="" loading="lazy" ${PIC_HERE.has(pic) ? '' : 'crossorigin="anonymous"'}>` : '<div class="lthumb"></div>'; };
+
+// the picture library (names of all ~870 pictures), loaded the first time it's needed
+let lib = null;
+const loadLib = () => lib ? Promise.resolve(lib) : fetch('img/library.json').then(r => r.json()).then(d => (lib = d)).catch(() => null);
+const libName = id => lib?.find(e => e[0] === id)?.[1] || String(id).replace(/_/g, ' ');
+// best library matches for a name: words that match (+ a few gym synonyms), machine/cable words count extra
+const LIB_SYN = {pulldown: 'lat pulldown', rdl: 'romanian deadlift', hamstring: 'leg', pec: 'butterfly', deck: 'butterfly', fly: 'flye', flyes: 'flye', raise: 'raise', press: 'press', triceps: 'tricep triceps', biceps: 'bicep biceps'};
+function libSearch(q, n = 40) {
+  if (!lib) return [];
+  const words = q.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 1 && !['the', 'on', 'with', 'and', 'both', 'arms', 'v1', 'v2'].includes(w));
+  const want = new Set(words.flatMap(w => [w, ...(LIB_SYN[w] || '').split(' ')]).filter(Boolean));
+  return lib.map(e => {
+    const toks = (e[1] + ' ' + e[3]).toLowerCase().split(/[^a-z0-9]+/);
+    let sc = 0;
+    for (const w of want) if (toks.some(t => t === w || (w.length > 3 && t.startsWith(w)) || (t.length > 3 && w.startsWith(t)))) sc += words.includes(w) ? 2 : 1;
+    if (/machine|lever/.test(q.toLowerCase()) && /machine|leverage/.test(e[1] + e[3])) sc += 1;
+    if (/cable/.test(q.toLowerCase()) && /cable/.test(e[3])) sc += 1;
+    return [sc - e[1].length / 100, e];
+  }).filter(([sc]) => sc >= 1).sort((a, b) => b[0] - a[0]).slice(0, n).map(([sc, e]) => ({sc, e}));
+}
+// a picture for a new exercise, if the name clearly matches one
+async function autoPic(x) {
+  if (!x || x.img !== undefined || !(await loadLib())) return;
+  const best = libSearch(x.name, 1)[0], need = x.name.split(/\s+/).filter(w => w.length > 2).length;
+  if (best && best.sc >= Math.max(3, need * 1.5)) { x.img = best.e[0]; save(); if (!document.activeElement?.matches('input,textarea,select')) photoRefresh(); }
+}
+// the standard picture big: start and end of the movement
+function picSheet(owner, vid) {
+  const x = ownerObj(owner), pic = picOf(x, vid); if (!pic) return;
+  const co = PIC_HERE.has(pic) ? '' : 'crossorigin="anonymous"';
+  openSheet(`<h3 style="margin-bottom:4px">${esc(exLabel(x, vid))}</h3>
+    <p class="explain" style="margin:0 0 12px;font-size:13px" id="picname">Standard picture: ${esc(libName(pic))}</p>
+    <div class="picpair"><img src="${picURL(pic, 0)}" alt="Start" ${co}><img src="${picURL(pic, 1)}" alt="End" ${co}></div>
+    <p class="explain" style="margin:10px 0 0;font-size:13px">From a free exercise library — it shows the movement, not your gym's exact machine. Use the camera button for photos of the machine itself.</p>
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn block" data-act="pic-choose" data-o="${esc(owner)}" data-v="${vid || ''}">${ICON.image} Change</button>
+      <button class="btn danger block" data-act="pic-set" data-o="${esc(owner)}" data-v="${vid || ''}" data-id="">${ICON.trash} Remove</button></div>
+    <button class="btn primary block" style="margin-top:8px" data-act="close-sheet">Close</button>`);
+  if (!lib) loadLib().then(() => { const el = $('#picname'); if (el) el.textContent = 'Standard picture: ' + libName(pic); });
+}
+// pick a standard picture from the library (search starts with the exercise's name)
+function picChooser(owner, vid) {
+  const x = ownerObj(owner); if (!x) return;
+  ui.picFor = {owner, vid};
+  openSheet(`<h3 style="margin-bottom:4px">Picture for ${esc(exLabel(x, vid))}</h3>
+    <input class="search" type="search" placeholder="Search the picture library" value="${esc((x.name + ' ' + varName(x, vid)).replace(/\(.*?\)|[–—×]/g, ' ').replace(/\s+/g, ' ').trim())}" data-act-input="picsearch" style="margin-top:6px">
+    <div id="picres"><div class="empty">Loading the library…</div></div>
+    <button class="btn primary block" style="margin-top:12px" data-act="close-sheet">Cancel</button>`);
+  loadLib().then(d => { if (ui.picFor?.owner === owner) picResults(); if (!d) $('#picres') && ($('#picres').innerHTML = '<div class="empty">The picture library needs internet the first time.</div>'); });
+}
+function picResults() {
+  const box = $('#picres'), inp = sheet.querySelector('[data-act-input="picsearch"]'); if (!box || !inp || !lib) return;
+  const cur = picOf(ownerObj(ui.picFor.owner), ui.picFor.vid), res = libSearch(inp.value, 30);
+  box.innerHTML = res.length ? `<div class="picgrid">${res.map(({e}) => `<button class="picopt" data-act="pic-set" data-o="${esc(ui.picFor.owner)}" data-v="${ui.picFor.vid || ''}" data-id="${esc(e[0])}" aria-pressed="${e[0] === cur}">
+      <img src="${picURL(e[0])}${PIC_HERE.has(e[0]) ? '' : '?browse'}" alt="" loading="lazy" ${PIC_HERE.has(e[0]) ? '' : 'crossorigin="anonymous"'}>${esc(e[1])}</button>`).join('')}</div>` : '<div class="empty">No match — try other words (e.g. "curl", "row", "press").</div>';
+}
+// set (or with id '' remove) the standard picture of an exercise or of one of its variants
+function setPic(owner, vid, id) {
+  const x = ownerObj(owner); if (!x) return;
+  const va = varsOf(x).find(a => a.id === vid);
+  if (va) va.img = id; else x.img = id;
+  save(); ui.redraw = true; closeSheet(); toast(id ? 'Picture set' : 'Picture removed');
 }
 function photoSheet(id) {
   const p = photos.find(x => x.id === id); if (!p) return;
   const same = photos.filter(x => x.owner === p.owner), i = same.indexOf(p), older = same[i + 1], newer = same[i - 1];
   openSheet(`<div class="pview"><img id="pfull" src="${thumbURL[id] || ''}" alt="Photo from ${fmtDate(p.date)}"></div>
     <div class="pnav"><button class="btn" data-act="photo" data-id="${older?.id || ''}" ${older ? '' : 'disabled'}>‹ Older</button>
-      <div class="num">${fmtDate(p.date, true)}<br><small>${i + 1} of ${same.length}</small></div>
+      <div class="num">${fmtDate(p.date, true)}${p.gym && p.owner !== 'body' ? ' · ' + esc(gymName(p.gym)) : ''}<br><small>${i + 1} of ${same.length}</small></div>
       <button class="btn" data-act="photo" data-id="${newer?.id || ''}" ${newer ? '' : 'disabled'}>Newer ›</button></div>
     <div style="display:flex;gap:8px;margin-top:12px"><button class="btn danger block" data-act="del-photo" data-id="${id}">${ICON.trash} Delete</button>
       <button class="btn primary block" data-act="close-sheet">Close</button></div>`);
@@ -1344,9 +1616,9 @@ function addExerciseSheet() {
 function pickList(q) {
   const s = getActive(); q = q.trim().toLowerCase();
   const used = new Set(s.entries.map(en => en.exId));
-  const match = e => !q || hits(e.name + ' ' + gymName(e.gym) + ' ' + gName(e.groupId), q);
+  const match = e => !q || hits(e.name + ' ' + gymName(e.gym) + ' ' + gName(e.groupId) + ' ' + varsOf(e).map(v => v.name).join(' '), q);
   const here = e => !e.gym || e.gym === s.gym;
-  const row = (e, showWhere) => { const last = lastDates()[e.id]; return `<button class="row-item" data-act="pick-ex" data-x="${e.id}" ${used.has(e.id) ? 'style="opacity:.45"' : ''}>
+  const row = (e, showWhere) => { const last = lastDates()[e.id]; return `<button class="row-item" data-act="pick-ex" data-x="${e.id}" ${used.has(e.id) ? 'style="opacity:.45"' : ''}>${listThumb(e)}
       <div class="grow"><div class="t">${esc(e.name)}</div><div class="s">${showWhere ? esc(gymName(e.gym)) + ' · ' + esc(gName(e.groupId)) + ' · ' : ''}${last ? 'last ' + fmtDate(last) : 'not logged yet'}</div></div>${ICON.plus.replace('<svg', '<svg class="chev"')}</button>`; };
   let out = '';
   const groups = s.groups.length ? s.groups : GROUPS.map(g => g[0]);
@@ -1362,6 +1634,92 @@ function pickList(q) {
   return out || '<div class="empty">No match.</div>';
 }
 
+/* ============ variants ============ */
+// "Variants" field in the exercise forms: names separated by commas
+const variantField = (x, ph) => `<label class="field"><span>Variants (optional)</span><input name="variants" value="${esc(varsOf(x).map(v => v.name).join(', '))}" placeholder="${esc(ph)}">
+  <p class="explain" style="margin:6px 0 0;font-size:13px">Versions of the exercise, separated by commas. Each gets its own suggestions and records. ${varsOf(x).length ? 'Renaming one keeps its history.' : 'The first one is what you have logged so far.'}</p></label>`;
+// every logged entry of an exercise (gym: workout entries; physio: its log + today's session entry)
+function entriesOf(x) {
+  if (x.log) return [...x.log, ...(PH().active?.entries.filter(en => en.itemId === x.id) || [])];
+  const out = [];
+  for (const s of [...db.sessions, ...(db.editBackup ? [db.editBackup] : [])]) for (const en of s.entries) if (en.exId === x.id) out.push(en);
+  return out;
+}
+// Save a new list of variant names. A name that stays keeps its id; a changed name in the same place is a rename.
+// A variant with logged sets is never dropped. Returns a message when something had to be kept.
+function applyVariants(x, raw) {
+  const names = [...new Map(raw.split(',').map(n => n.trim()).filter(Boolean).map(n => [n.toLowerCase(), n])).values()];
+  const old = varsOf(x), ens = entriesOf(x), first = old[0]?.id;
+  if (first) ens.forEach(en => { if (!old.some(v => v.id === en.vid)) en.vid = first; });   // pin old "first variant" sets before the order can change
+  const used = new Set(ens.map(en => en.vid).filter(Boolean)), taken = new Set();
+  // names not in the old list are renames of the old names that disappeared, in order — but only when no variant
+  // disappeared without a new name (then "rename" or "delete" can't be told apart, so nothing is renamed)
+  const same = n => old.find(o => o.name.toLowerCase() === n.toLowerCase());
+  const gone = old.filter(o => !names.some(n => n.toLowerCase() === o.name.toLowerCase()));
+  const fresh = names.filter(n => !same(n)), renames = gone.length <= fresh.length ? gone : [];
+  const next = names.map(n => {
+    let v = same(n) || renames[fresh.indexOf(n)];
+    v = v ? {...v, name: n} : {id: uid(), name: n};
+    taken.add(v.id); return v;
+  });
+  const kept = old.filter(o => !taken.has(o.id) && used.has(o.id));
+  next.push(...kept);
+  if (next.length <= 1) {   // one variant is the same as none: everything is just the exercise again
+    if (next[0]?.img && !x.img) x.img = next[0].img;
+    delete x.variants; ens.forEach(en => { delete en.vid; });
+  } else {
+    x.variants = next;
+    if (!first) ens.forEach(en => { en.vid = next[0].id; });   // what was logged so far = the first variant
+  }
+  return kept.length ? `Kept ${kept.map(v => v.name).join(', ')} — it has logged sets` : '';
+}
+// quick "add a variant" from a workout card
+function variantSheet(exId, enId) {
+  const ex = getEx(exId); if (!ex) return;
+  const has = varsOf(ex).length;
+  openSheet(`<h3>Add a variant</h3>
+    <p class="explain" style="margin:0 0 12px">E.g. wide grip and V-grip on the pulldown. Each variant gets its own suggestions and records, and the progress page can show them together or apart.</p>
+    <form id="varForm" data-x="${ex.id}" data-en="${enId || ''}">
+      ${has ? '' : `<label class="field"><span>What you have logged so far</span><input name="first" required placeholder="e.g. Wide grip"></label>`}
+      <label class="field"><span>New variant</span><input name="name" required placeholder="e.g. V-grip"></label>
+      <button class="btn primary block" type="submit">Add</button>
+    </form>`);
+}
+// Merge one exercise into another as a variant (e.g. "Wide-Grip Pulldown" becomes Pulldown · Wide grip), history and all
+function mergePicker(srcId) {
+  const src = getEx(srcId); if (!src) return;
+  const list = db.exercises.filter(e => e.id !== src.id && e.groupId === src.groupId && (e.gym || '') === (src.gym || '')).sort(byRecent);
+  openSheet(`<h3>Make "${esc(src.name)}" a variant of…</h3>
+    <p class="explain" style="margin:0 0 12px">Its history moves into the exercise you pick, as its own variant. ${esc(gName(src.groupId))} exercises at ${esc(gymName(src.gym))}:</p>
+    <div class="list">${list.map(e => `<button class="row-item" data-act="merge-pick" data-x="${src.id}" data-t="${e.id}">${listThumb(e)}<div class="grow"><div class="t">${esc(e.name)}</div>
+      <div class="s">${varsOf(e).length ? esc(varsOf(e).map(v => v.name).join(' / ')) : `${logOf(e.id).length} sessions`}</div></div>${ICON.chev}</button>`).join('') || '<div class="empty">No other exercise to merge with.</div>'}</div>`);
+}
+function mergeForm(srcId, tId) {
+  const src = getEx(srcId), t = getEx(tId); if (!src || !t) return;
+  openSheet(`<h3>${esc(src.name)} → ${esc(t.name)}</h3>
+    <form id="mergeForm" data-x="${src.id}" data-t="${t.id}">
+      ${varsOf(t).length ? '' : `<label class="field"><span>Variant name for ${esc(t.name)}'s own history</span><input name="tname" required value="${esc(t.name)}"></label>`}
+      ${varsOf(src).length ? `<p class="explain">Its variants (${esc(varsOf(src).map(v => v.name).join(', '))}) move over with their names.</p>`
+        : `<label class="field"><span>Variant name for ${esc(src.name)}</span><input name="sname" required value="${esc(src.name)}"></label>`}
+      <p class="explain" style="font-size:13px">${logOf(src.id).length} sessions move over. "${esc(src.name)}" is then removed as a separate exercise. This can't be undone (export a backup first if unsure).</p>
+      <button class="btn primary block" type="submit">Merge</button>
+    </form>`);
+}
+function doMerge(src, t, tName, sName) {
+  t.variants ||= [];
+  const byName = (n, img) => { n = n.replace(/,/g, ' ').trim() || 'Variant'; let v = t.variants.find(a => a.name.toLowerCase() === n.toLowerCase()); if (!v) { v = {id: uid(), name: n}; if (img) v.img = img; t.variants.push(v); } return v.id; };
+  if (!t.variants.length) { const id = byName(tName); entriesOf(t).forEach(en => { en.vid = id; }); }
+  const map = {}, sv = varsOf(src);
+  for (const v of sv) map[v.id] = byName(v.name, 'img' in v ? v.img : src.img);
+  const one = sv.length ? null : byName(sName, src.img);
+  for (const en of entriesOf(src)) { en.vid = one || map[vidOf(src, en.vid)]; en.exId = t.id; }
+  if (t.variants.length < 2) { delete t.variants; entriesOf(t).forEach(en => { delete en.vid; }); }   // both got the same name
+  if (!t.notes && src.notes) t.notes = src.notes;
+  db.exercises = db.exercises.filter(e => e.id !== src.id);
+  movePhotos(src.id, t.id);
+  computeFactors(); recomputePRs(); save();
+}
+
 function exerciseForm(ex, from) {
   const groupSel = GROUPS.map(([id, n]) => `<option value="${id}" ${(ex?.groupId || getActive()?.groups[0] || (ui.exGroup !== 'all' ? ui.exGroup : 'chest')) === id ? 'selected' : ''}>${n}</option>`).join('');
   openSheet(`<h3>${ex ? 'Edit exercise' : 'New exercise'}</h3>
@@ -1370,9 +1728,11 @@ function exerciseForm(ex, from) {
       <label class="field"><span>Muscle group</span><select name="groupId">${groupSel}</select></label>
       <label class="field"><span>Gym</span><select name="gym">${[['', 'Any gym (e.g. dumbbells)'], ...GYMS].map(([id, n]) => `<option value="${id}" ${(ex ? ex.gym || '' : getActive()?.gym || (ui.viewGym !== 'all' ? ui.viewGym : db.settings.gym)) === id ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       <label class="field"><span>Setup notes (optional)</span><input name="notes" value="${esc(ex?.notes)}" placeholder="e.g. Seat in hole 3"></label>
+      ${variantField(ex, 'e.g. Wide grip, V-grip')}
       <label class="field"><span>Weight step (kg)</span><input name="inc" inputmode="decimal" value="${fmt(ex?.inc ?? db.settings.inc)}"></label>
       <button class="btn primary block" type="submit">${ex ? 'Save' : 'Create'}</button>
-      ${ex ? `<button class="btn danger block" type="button" style="margin-top:8px" data-act="del-ex" data-x="${ex.id}">${ICON.trash} Delete exercise</button>` : ''}
+      ${ex ? `<button class="btn block" type="button" style="margin-top:8px" data-act="merge-ex" data-x="${ex.id}">Make it a variant of another exercise…</button>
+        <button class="btn danger block" type="button" style="margin-top:8px" data-act="del-ex" data-x="${ex.id}">${ICON.trash} Delete exercise</button>` : ''}
     </form>`);
 }
 
@@ -1391,17 +1751,27 @@ function settingsSheet() {
       <p class="explain" style="margin:0 0 8px">Everything lives only on this phone. Export a backup now and then (e.g. to Google Drive). Photos are not in the backup file — they live only in the app. A picture taken from inside Liftbook is not saved to your gallery, so for body photos you want to keep for sure, take them with the camera app and pick them from the gallery.</p>
       <div style="display:flex;gap:8px"><button class="btn block" data-act="export">Export</button><button class="btn block" data-act="import">Import</button></div></div>
     <div style="margin-top:18px"><button class="btn danger block" data-act="reset">Erase all data</button></div>
-    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v4.0 · works offline</p>`);
+    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v5.0 · works offline<br><small>Standard exercise pictures: free-exercise-db (public domain)</small></p>`);
 }
 
+// is this entry an off day? ('marked', 'auto' or undefined)
+function offWhy(s, en) {
+  if (en.off === true) return 'marked';
+  if (en.off === false || !getEx(en.exId)) return undefined;
+  const vid = vidOf(getEx(en.exId), en.vid);
+  return offFlags(logOf(en.exId, undefined, s.date, vid)).get(en);
+}
 function sessionSheet(s) {
+  const all = s.entries.length && s.entries.every(en => en.off === true);
   openSheet(`<h3>${fmtDate(s.date, true)}</h3>
     <div class="list">${s.entries.slice().sort((a, b) => (a.pos || 0) - (b.pos || 0)).map(en => {
-      const ex = getEx(en.exId);
+      const ex = getEx(en.exId), why = offWhy(s, en);
       return `<div class="row-item" style="align-items:flex-start"><span class="pos num" style="width:30px;height:30px;font-size:15px;border-radius:9px">${en.pos || '?'}</span>
-        <div class="grow"><div class="t">${esc(ex?.name || 'Deleted')}</div><div class="s num">${esc(setsText(en.sets))}</div>${en.note ? `<div class="s" style="font-style:italic">${esc(en.note)}</div>` : ''}</div></div>`;
+        <div class="grow"><div class="t">${esc(exLabel(ex, en.vid))}${offTag(why)}</div><div class="s num">${esc(setsText(en.sets))}</div>${en.note ? `<div class="s" style="font-style:italic">${esc(en.note)}</div>` : ''}</div></div>`;
     }).join('')}</div>
-    <div style="display:flex;gap:8px;margin-top:16px">
+    <p class="explain" style="font-size:13px;margin:12px 0 0">"off day?" = clearly below your usual, so the next workout starts from the session before it. "off day" = marked by you.</p>
+    <button class="btn block" style="margin-top:10px" data-act="off-session" data-s="${s.id}">${all ? 'Not an off day after all' : 'Mark whole workout as off day'}</button>
+    <div style="display:flex;gap:8px;margin-top:8px">
       <button class="btn block" data-act="edit-session" data-s="${s.id}">${ICON.edit} Edit</button>
       <button class="btn danger block" data-act="del-session" data-s="${s.id}">${ICON.trash} Delete</button></div>`);
 }
@@ -1412,10 +1782,11 @@ function startSession() {
   db.sessions.push(s); db.active = s.id; ui.pick.clear(); save(); render();
 }
 function addEntry(exId) {
-  const s = getActive();
-  const h = logOf(exId, s.id, s.date);
-  const n = h.length ? Math.max(1, h[0].en.sets.filter(x => x.done).length) : 3;
+  const s = getActive(), vid = startVid(exId, s);
+  const sug = suggest(exId, 1, s.id, vid);   // as many sets as the session the suggestion is based on
+  const n = sug ? Math.max(1, sug.last.en.sets.filter(x => x.done).length) : 3;
   const en = {id: uid(), exId, note: '', sets: Array.from({length: n}, () => ({w: '', r: '', done: false}))};
+  if (vid) en.vid = vid;
   s.entries.push(en); save(); closeSheet(); render();
   requestAnimationFrame(() => $('#card-' + en.id)?.scrollIntoView({behavior: 'smooth', block: 'center'}));
 }
@@ -1439,12 +1810,18 @@ function commitFinish(s, kept) {
   const mins = s.start ? Math.round((s.end - s.start) / 60000) : 0;
   const sets = s.entries.reduce((a, en) => a + en.sets.length, 0);
   const vol = s.entries.reduce((a, en) => a + en.sets.reduce((b, st) => b + num(st.w) * num(st.r), 0), 0);
+  // exercises clearly below your usual today: next time starts from the session before, unless you say it was fine
+  const low = s.entries.filter(en => offWhy(s, en) === 'auto');
+  const lowHtml = low.length ? `<div class="pick-sec">Below your usual today</div><div class="pr-list offlist">${low.map(en => `<div class="row-item"><div class="grow"><div class="t">${esc(exLabel(getEx(en.exId), en.vid))}</div>
+      <div class="s">${esc(setsText(en.sets))} — next time starts from your previous level.</div></div><button class="mini" data-act="off-set" data-s="${s.id}" data-e="${en.id}">It was fine</button></div>`).join('')}</div>` : '';
   openSheet(`<h3>Workout done 💪</h3>
     <div class="big-stats">
       <div class="stat"><div class="k">Time</div><div class="v num">${mins}<small> min</small></div></div>
       <div class="stat"><div class="k">Sets</div><div class="v num">${sets}</div></div>
       <div class="stat"><div class="k">Volume</div><div class="v num">${Math.round(vol).toLocaleString('en-GB')}<small> kg</small></div></div></div>
-    ${prs.length ? `<div class="pick-sec">New order-adjusted records</div><div class="pr-list">${prs.map(en => `<div class="row-item"><span class="badge-pr" style="margin:0">PR</span><div class="grow"><div class="t">${esc(getEx(en.exId).name)}</div><div class="s">as ${ord(slot(en))} · ${esc(setsText(en.sets))}</div></div></div>`).join('')}</div>` : '<p class="explain">No new records this time — consistency is what builds them.</p>'}
+    ${prs.length ? `<div class="pick-sec">New order-adjusted records</div><div class="pr-list">${prs.map(en => `<div class="row-item"><span class="badge-pr" style="margin:0">PR</span><div class="grow"><div class="t">${esc(exLabel(getEx(en.exId), en.vid))}</div><div class="s">as ${ord(slot(en))} · ${esc(setsText(en.sets))}</div></div></div>`).join('')}</div>` : '<p class="explain">No new records this time — consistency is what builds them.</p>'}
+    ${lowHtml}
+    <button class="btn block" style="margin-top:8px" data-act="off-session" data-s="${s.id}" data-keep="1">Felt off today? Mark the whole workout</button>
     <button class="btn primary block" style="margin-top:8px" data-act="close-sheet">Nice</button>`);
 }
 
@@ -1471,7 +1848,7 @@ $('#importFile').addEventListener('change', async ev => {
     if (!ok) throw new Error('bad');
     confirmSheet('Replace all data?', `The backup has ${d.sessions.filter(s => s.done).length} workouts and ${d.exercises.length} exercises. It replaces what is on this phone now${PH().programs.length && !d.physio ? ' — physio sessions logged in the app are not in it and will be lost' : ''}.`, 'Replace', () => {
       try { localStorage.setItem(KEY + '.before-import', JSON.stringify(db)); } catch (e) {}
-      leaveDetail(); db = d; db.physio ||= {programs: [], active: null}; addPhysioPress(); computeFactors(); recomputePRs(); save(); ui.tab = 'train'; render(); renderRest(); toast('Backup restored'); importPhysio();
+      leaveDetail(); db = d; db.physio ||= {programs: [], active: null}; addPhysioPress(); physioV5(); applyPics(); computeFactors(); recomputePRs(); save(); ui.tab = 'train'; render(); renderRest(); toast('Backup restored'); importPhysio();
     });
   } catch (e) { toast('That file is not a Liftbook backup'); }
 });
@@ -1568,19 +1945,68 @@ document.addEventListener('click', ev => {
       if (en.rows[en.rows.length - 1].done) { toast('Untick the last set first'); break; }
       en.rows.pop(); save(); render(); break;
     }
+    case 'ph-variant': { const en = phEntry(el.dataset.x); if (!en) break; en.vid = el.dataset.v; save(); render(); break; }
+    case 'ph-off': {   // mark a physio session as off day (data-v="1", toggles) or say it was fine (data-v="0")
+      const {it} = phItem(el.dataset.x), e = it?.log.find(x => x.n === +el.dataset.n && (!el.dataset.s || x.sid === el.dataset.s)); if (!e) break;
+      if (el.dataset.v === '0') e.off = false; else if (e.off === true) delete e.off; else e.off = true;
+      save();
+      if (ui.sheetOpen && ui.sheetPh) physioSheet(ui.sheetPh, true, ui.sheetPhVid);
+      else if (ui.sheetOpen) { el.textContent = el.dataset.v === '0' ? 'Noted ✓' : e.off ? 'Off day ✓' : 'Off day'; el.disabled = el.dataset.v === '0'; ui.redraw = true; }
+      else render();
+      break;
+    }
+    case 'ph-hist-var': ui.sel = null; ui.phAll = false; physioSheet(el.dataset.x, true, el.dataset.v || undefined); break;
+    case 'ph-add-ex': phAddSheet(); break;
+    case 'ph-add-to': {
+      const a = PH().active, {it} = phItem(el.dataset.x); if (!a || !it) { closeSheet(); break; }
+      a.entries.push(phNewEntry(it)); save(); closeSheet(); render();
+      requestAnimationFrame(() => $('#pcard-' + it.id)?.scrollIntoView({behavior: 'smooth', block: 'center'}));
+      break;
+    }
+    case 'ph-move': phMove(el.dataset.x, +el.dataset.d); break;
+    case 'pic': picSheet(el.dataset.o, el.dataset.v || undefined); break;
+    case 'pic-choose': picChooser(el.dataset.o, el.dataset.v || undefined); break;
+    case 'pic-set': setPic(el.dataset.o, el.dataset.v || undefined, el.dataset.id); break;
+    case 'variant': { const en = findEntry(el.dataset.en); if (!en) break; en.vid = el.dataset.v; save(); render(); break; }
+    case 'add-variant': variantSheet(el.dataset.x, el.dataset.en); break;
+    case 'detail-var': ui.detailVid = el.dataset.v; ui.sel = null; render(); break;
+    case 'merge-ex': mergePicker(el.dataset.x); break;
+    case 'merge-pick': mergeForm(el.dataset.x, el.dataset.t); break;
+    case 'off-set': {   // "it was fine" / "use it": this session counts as normal after all
+      const s = db.sessions.find(x => x.id === el.dataset.s), en = s?.entries.find(e => e.id === el.dataset.e); if (!en) break;
+      en.off = false; computeFactors(); save();
+      if (ui.sheetOpen) { el.textContent = 'Noted ✓'; el.disabled = true; ui.redraw = true; } else render();
+      break;
+    }
+    case 'off-toggle': {
+      const en = findEntry(el.dataset.en); if (!en) break;
+      if (en.off === true) delete en.off; else en.off = true;
+      save(); closeSheet(); render(); toast(en.off ? 'Off day — next time starts from your previous level' : 'Not an off day');
+      break;
+    }
+    case 'off-session': {
+      const s = db.sessions.find(x => x.id === el.dataset.s); if (!s) break;
+      const all = s.entries.every(en => en.off === true);
+      s.entries.forEach(en => { if (all) delete en.off; else en.off = true; });
+      computeFactors(); save(); ui.redraw = true;
+      if (el.dataset.keep) el.textContent = all ? 'Felt off today? Mark the whole workout' : 'Marked as off day ✓ (tap to undo)';
+      else sessionSheet(s);
+      toast(all ? 'Not an off day' : 'Off day — next time starts from your previous level');
+      break;
+    }
     case 'photo': photoSheet(el.dataset.id); break;
     case 'add-photo':
-      ui.photoOwner = el.dataset.o;
+      ui.photoOwner = el.dataset.o; ui.photoGym = getActive()?.gym || PH().active?.gym || ownerObj(el.dataset.o)?.gym || db.settings.gym;
       if (ui.sheetOpen && !ui.sheetPh) closeSheet();   // e.g. the exercise menu; a physio sheet stays open and shows the new photo
       $('#photoFile').click(); break;
     case 'del-photo': { const id = el.dataset.id; confirmSheet('Delete photo?', 'It is removed from Liftbook on this phone.', 'Delete', () => delPhoto(id)); break; }
     case 'ph-finish': phFinish(); break;
     case 'ph-discard': confirmSheet('Discard session?', 'Nothing from this physio session will be saved.', 'Discard', () => { PH().active = null; db.rest = null; save(); render(); renderRest(); }); break;
-    case 'ph-hist': ui.sel = null; ui.phAll = false; physioSheet(el.dataset.x); break;
-    case 'ph-all': ui.phAll = true; physioSheet(el.dataset.x, true); break;
+    case 'ph-hist': ui.sel = null; ui.phAll = false; physioSheet(el.dataset.x, false, el.dataset.v || undefined); break;
+    case 'ph-all': ui.phAll = true; physioSheet(el.dataset.x, true, ui.sheetPhVid); break;
     case 'ph-prog': phProgSheet(el.dataset.p); break;
     case 'ph-edit': phEditForm(el.dataset.x); break;
-    case 'ph-new': phEditForm(null, el.dataset.p); break;
+    case 'ph-new': phEditForm(null, el.dataset.p, el.dataset.from); break;
     case 'ph-del': {
       const {p, it} = phItem(el.dataset.x); if (!it) { closeSheet(); break; }
       confirmSheet('Delete exercise?', `Its ${it.log.length} logged session${it.log.length === 1 ? '' : 's'} will be removed too. To just stop doing it, mark it as an old version instead.`, 'Delete', () => {
@@ -1611,7 +2037,7 @@ document.addEventListener('click', ev => {
       if (ex.gym && ex.gym !== g) {
         const base = ex.gym === 'other' ? ex.name.replace(/ \((Manna|Hals|FW|Greece)\)$/, '') : ex.name;
         let mine = db.exercises.find(e => e.gym === g && e.groupId === ex.groupId && e.name.toLowerCase() === base.toLowerCase());
-        if (!mine) { mine = {...ex, id: uid(), gym: g, name: base, notes: ''}; db.exercises.push(mine); toast(`Added ${mine.name} to ${gymName(g)}`); }
+        if (!mine) { mine = {...ex, id: uid(), gym: g, name: base, notes: ''}; if (ex.variants) mine.variants = ex.variants.map(v => ({...v})); db.exercises.push(mine); toast(`Added ${mine.name} to ${gymName(g)}`); }
         addEntry(mine.id);
       } else addEntry(ex.id);
       break;
@@ -1638,7 +2064,9 @@ document.addEventListener('click', ev => {
         ${i > 0 ? `<button class="opt" data-act="move" data-en="${en.id}" data-d="-1">${ICON.up} Move earlier</button>` : ''}
         ${i < s.entries.length - 1 ? `<button class="opt" data-act="move" data-en="${en.id}" data-d="1">${ICON.down} Move later</button>` : ''}
         ${en.sets.length > 1 ? `<button class="opt" data-act="del-set" data-en="${en.id}">${ICON.trash} Remove last set</button>` : ''}
-        ${getEx(en.exId) ? `<button class="opt" data-act="add-photo" data-o="${en.exId}">${ICON.camera} Add photo (machine, seat, grip…)</button>` : ''}
+        ${getEx(en.exId) ? `<button class="opt" data-act="add-photo" data-o="${en.exId}">${ICON.camera} Add photo (machine, seat, grip…)</button>
+          <button class="opt" data-act="add-variant" data-x="${en.exId}" data-en="${en.id}">${ICON.plus} Add variant (grip, lying/seated…)</button>` : ''}
+        <button class="opt" data-act="off-toggle" data-en="${en.id}">${ICON.down} ${en.off === true ? 'Undo off day' : 'Off day — don\'t build on this next time'}</button>
         <button class="opt" data-act="detail" data-x="${en.exId}">${ICON.chart} See progress</button>
         <button class="opt danger" data-act="remove-entry" data-en="${en.id}">${ICON.trash} Remove from workout</button>`);
       break;
@@ -1680,10 +2108,10 @@ document.addEventListener('click', ev => {
     case 'detail':
       if (ui.sheetOpen) sheetToPage(); else history.pushState({page: 'detail'}, '');
       if (ui.tab !== 'detail') { ui.detailFrom = ui.tab; ui.returnY = window.scrollY; }
-      ui.detail = el.dataset.x; ui.sel = null; ui.tab = 'detail'; render(); window.scrollTo(0, 0); break;
+      ui.detail = el.dataset.x; ui.detailVid = el.dataset.v || ''; ui.sel = null; ui.tab = 'detail'; render(); window.scrollTo(0, 0); break;
     case 'back': history.back(); break;
-    case 'pt': ui.sel = +el.dataset.i; if (ui.sheetOpen && ui.sheetPh) physioSheet(ui.sheetPh, true); else if (ui.sheetOpen && ui.sheetEx) historySheet(ui.sheetEx, true); else render(); break;
-    case 'ex-hist': ui.sel = null; historySheet(el.dataset.x); break;
+    case 'pt': ui.sel = +el.dataset.i; if (ui.sheetOpen && ui.sheetPh) physioSheet(ui.sheetPh, true, ui.sheetPhVid); else if (ui.sheetOpen && ui.sheetEx) historySheet(ui.sheetEx, true, ui.sheetVid); else render(); break;
+    case 'ex-hist': ui.sel = null; historySheet(el.dataset.x, false, el.dataset.v || undefined); break;
     case 'new-ex': exerciseForm(null, el.dataset.from); break;
     case 'edit-ex': exerciseForm(getEx(el.dataset.x)); break;
     case 'del-ex': {
@@ -1729,6 +2157,7 @@ document.addEventListener('input', ev => {
   } else if (el.dataset.actInput === 'note') { const en = findEntry(el.dataset.en); if (en) { en.note = el.value; save(); } }
   else if (el.dataset.actInput === 'exsearch') { ui.exQuery = el.value; $('#exlist').innerHTML = exRows(); }
   else if (el.dataset.actInput === 'picksearch') { $('#picklist').innerHTML = pickList(el.value); }
+  else if (el.dataset.actInput === 'picsearch') picResults();
 });
 document.addEventListener('keydown', ev => {
   if (ev.key === 'Enter' && ev.target.dataset.pf) {
@@ -1754,9 +2183,35 @@ document.addEventListener('submit', ev => {
     if (!data.name) return;
     if (!data.lo !== !data.hi) { toast('Fill in both "from" and "to", or neither'); return; }
     if (data.lo && data.lo > data.hi) { toast('"From" must be below "to"'); return; }
-    if (id) { const {it} = phItem(id); if (!it) { closeSheet(); return; } Object.assign(it, data); }
-    else p.items.push({id: uid(), ...data, log: []});
-    save(); closeSheet(); render(); toast('Saved');
+    let msg = '';
+    if (id) { const {it} = phItem(id); if (!it) { closeSheet(); return; } Object.assign(it, data); msg = applyVariants(it, f.get('variants') || ''); }
+    else {
+      const it = {id: uid(), ...data, log: []}; applyVariants(it, f.get('variants') || ''); p.items.push(it); autoPic(it);
+      if (ev.target.dataset.from === 'session' && PH().active?.progId === p.id) PH().active.entries.push(phNewEntry(it));
+    }
+    save(); closeSheet(); render(); toast(msg || 'Saved');
+    return;
+  }
+  if (ev.target.id === 'varForm') {
+    ev.preventDefault();
+    const f = new FormData(ev.target), ex = getEx(ev.target.dataset.x); if (!ex) { closeSheet(); return; }
+    const name = f.get('name').replace(/,/g, ' ').trim(), first = (f.get('first') || '').replace(/,/g, ' ').trim();
+    if (!name || (!varsOf(ex).length && !first)) return;
+    if ((varsOf(ex).length ? varsOf(ex).map(v => v.name) : [first]).some(n => n.toLowerCase() === name.toLowerCase())) { toast('That variant already exists'); return; }
+    const msg = applyVariants(ex, [...(varsOf(ex).length ? varsOf(ex).map(v => v.name) : [first]), name].join(','));
+    const v = varsOf(ex).find(a => a.name.toLowerCase() === name.toLowerCase()), en = findEntry(ev.target.dataset.en);
+    if (en && v) en.vid = v.id;   // today you're doing the new one
+    computeFactors(); recomputePRs(); save(); closeSheet(); render(); toast(msg || `Added ${name}`);
+    return;
+  }
+  if (ev.target.id === 'mergeForm') {
+    ev.preventDefault();
+    const f = new FormData(ev.target), src = getEx(ev.target.dataset.x), t = getEx(ev.target.dataset.t);
+    if (!src || !t) { closeSheet(); return; }
+    doMerge(src, t, String(f.get('tname') || '').trim() || t.name, String(f.get('sname') || '').trim() || src.name);
+    closeSheet();
+    if (ui.tab === 'detail') { ui.detail = t.id; ui.detailVid = ''; }
+    render(); toast(`Merged into ${t.name}`);
     return;
   }
   if (ev.target.id !== 'exForm') return;
@@ -1765,9 +2220,13 @@ document.addEventListener('submit', ev => {
   const data = {name: f.get('name').trim(), groupId: f.get('groupId'), gym: f.get('gym'), notes: f.get('notes').trim(), inc: num(f.get('inc')) > 0 ? num(f.get('inc')) : 2.5};
   if (!data.name) return;
   if (id && !getEx(id)) { closeSheet(); return; }
-  if (id) { Object.assign(getEx(id), data); save(); closeSheet(); render(); toast('Saved'); }
+  if (id) {
+    const ex = getEx(id); Object.assign(ex, data);
+    const msg = applyVariants(ex, f.get('variants') || '');
+    computeFactors(); recomputePRs(); save(); closeSheet(); render(); toast(msg || 'Saved');
+  }
   else {
-    const ex = {id: uid(), ...data}; db.exercises.push(ex); save();
+    const ex = {id: uid(), ...data}; applyVariants(ex, f.get('variants') || ''); db.exercises.push(ex); save(); autoPic(ex);
     if (from === 'session' && getActive()) addEntry(ex.id);
     else { closeSheet(); render(); toast('Exercise created'); }
   }
@@ -1781,7 +2240,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ============ boot ============ */
-computeFactors(); recomputePRs(); addPhysioPress();
+computeFactors(); recomputePRs(); addPhysioPress(); physioV5(); applyPics();
 if (getActive() || PH().active) ui.tab = 'train';
 render(); renderRest();
 importKeep().then(importPhysio);
@@ -1796,6 +2255,16 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   });
 }
 if (readOnly) toast('Updating… close and reopen Liftbook');
+// keep the standard pictures on the phone, so they also show in a gym without signal (sw.js serves them from this cache)
+function cachePics() {
+  if (!('caches' in window) || !navigator.onLine || !navigator.serviceWorker?.controller) return;
+  const all = [...db.exercises, ...PH().programs.flatMap(p => p.items)];
+  const ids = new Set(all.flatMap(x => [picOf(x), ...varsOf(x).map(v => picOf(x, v.id))]).filter(id => id && PIC_HERE.has(id)));
+  caches.open('liftbook-img').then(async c => {
+    for (const id of ids) for (const k of [0, 1]) { const u = picURL(id, k); if (!(await c.match(u))) await c.add(u).catch(() => {}); }
+  }).catch(() => {});
+}
+setTimeout(cachePics, 8000);
 </script>
 </body>
 </html>
