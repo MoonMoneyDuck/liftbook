@@ -276,6 +276,7 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .vchip{height:34px;padding:0 12px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);font-weight:700;font-size:13px;color:var(--text-2)}
 .vchip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .vchip.add{min-width:34px;padding:0 10px;border-style:dashed}
+.vlabel{align-self:center;font-size:12px;font-weight:700;color:var(--muted);margin-right:2px}
 .pthumb{position:relative}
 .pthumb.stock{background:#fff;border-style:dashed}
 .pthumb .tag{position:absolute;left:3px;bottom:3px;font-size:9px;font-weight:800;padding:1px 4px;border-radius:5px;background:rgba(0,0,0,.62);color:#fff;line-height:1.3}
@@ -326,6 +327,7 @@ div.lthumb{border:1px dashed var(--line)}
 <div id="toast" class="toast" role="status"></div>
 <input type="file" id="importFile" accept="application/json,.json" hidden>
 <input type="file" id="photoFile" accept="image/*" hidden>
+<input type="file" id="photoCam" accept="image/*" capture="environment" hidden>
 
 <script>
 'use strict';
@@ -354,7 +356,10 @@ const PIC_GYM = {"45° Smith Press with Bands":"Smith_Machine_Incline_Bench_Pres
 const PIC_PH = {"leg-press-aal-1":"Leg_Press","leg-press-aal-2":"Leg_Press","leg-press-br-1":"Leg_Press","leg-press-br-2":"Leg_Press","calf-1":"Standing_Calf_Raises","bridge-1":"Barbell_Glute_Bridge","bridge-2":"Barbell_Glute_Bridge","bridge-3":"Barbell_Glute_Bridge","rdl":"Romanian_Deadlift","side-raise":"Side_Lateral_Raise","side-hold":"Side_Lateral_Raise","front-raise":"Front_Dumbbell_Raise","front-hold":"Front_Dumbbell_Raise","pushup-hold":"Pushups","shoulder-press":"Machine_Shoulder_Military_Press"};
 const PIC_HERE = new Set([...Object.values(PIC_GYM), ...Object.values(PIC_PH), 'Seated_Leg_Curl', 'Lying_Leg_Curls', 'V-Bar_Pulldown', 'Close-Grip_Front_Lat_Pulldown', 'Underhand_Cable_Pulldowns']);
 const PIC_LIB = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
-const picURL = (id, k = 0) => PIC_HERE.has(id) ? `img/ex/${id}-${k}.jpg` : `${PIC_LIB}${encodeURIComponent(id)}/${k}.jpg`;
+// A picture id is a library picture, or 'own:<photo id>' = your own photo used as the picture (v6). For those this
+// gives the thumbnail; the big version is loaded from IndexedDB when the picture is opened.
+const picURL = (id, k = 0) => id.startsWith('own:') ? thumbURL[id.slice(4)] || '' : PIC_HERE.has(id) ? `img/ex/${id}-${k}.jpg` : `${PIC_LIB}${encodeURIComponent(id)}/${k}.jpg`;
+const picCO = id => PIC_HERE.has(id) || id.startsWith('own:') ? '' : 'crossorigin="anonymous"';
 
 const ICON = {
   chev:'<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
@@ -397,8 +402,14 @@ const varsOf = x => x?.variants || [];
 const vidOf = (x, v) => { const vs = varsOf(x); return vs.some(a => a.id === v) ? v : vs[0]?.id || ''; };
 const varName = (x, v) => varsOf(x).length ? varsOf(x).find(a => a.id === vidOf(x, v)).name : '';
 const exLabel = (x, v) => (x?.name || 'Deleted') + (varName(x, v) ? ' · ' + varName(x, v) : '');
+// v7: which machine an exercise was done on (e.g. two cable stations). ex.machines = [{id, name}], entry.mach = id.
+const machsOf = x => x?.machines || [];
+const machOf = (x, m) => machsOf(x).some(a => a.id === m) ? m : '';
+const machName = (x, m) => machsOf(x).find(a => a.id === m)?.name || '';
 // the standard picture of an exercise (or of one variant; a variant can also have "no picture" = '')
-const picOf = (x, v) => { const va = varsOf(x).find(a => a.id === vidOf(x, v)); return (va && 'img' in va ? va.img : x?.img) || ''; };
+// (an own photo that isn't on this phone, e.g. after restoring a backup, counts as no picture)
+const picRaw = (x, v) => { const va = varsOf(x).find(a => a.id === vidOf(x, v)); return (va && 'img' in va ? va.img : x?.img) || ''; };
+const picOf = (x, v) => { const id = picRaw(x, v); return id.startsWith('own:') && !thumbURL[id.slice(4)] ? '' : id; };
 
 /* ============ storage ============ */
 function emptyDb() {
@@ -507,7 +518,7 @@ async function importKeep() {
   db.exercises = exercises; db.sessions = [...keep, ...mine]; db.keepV2 = true;
   if (ui.sheetOpen) closeSheet();
   if (ui.tab === 'detail') { leaveDetail(); ui.tab = 'exercises'; }
-  applyPics(); computeFactors(); recomputePRs(); save(); render(); renderRest();
+  addCableRow(); applyPics(); computeFactors(); recomputePRs(); save(); render(); renderRest();
   toast(`Imported ${keep.length} workouts from Google Keep`);
 }
 // newest logged date per exercise (cached until the next save)
@@ -610,6 +621,25 @@ function computeFactors() {
   factors = F;
 }
 const fac = k => factors[Math.min(Math.max(k || 1, 1), 5)].f;
+// v7: the factor for a fractional slot (between two whole slots: straight line between their factors)
+const facx = x => { x = Math.min(Math.max(x || 1, 1), 5); const a = Math.floor(x), b = Math.ceil(x); return a === b ? fac(a) : fac(a) + (fac(b) - fac(a)) * (x - a); };
+// v7: how tired the muscle is, counted in sets. Every earlier exercise for the same muscle normally counts as one
+// slot at TYPICAL_SETS sets; fewer sets before (e.g. 2 instead of 3) = fresher, so the suggestion goes up a bit.
+// Earlier exercise in today's workout counts with its planned sets (or more, if more were ticked). Falls back to the whole slot when
+// the earlier exercises aren't all there (old Keep entries).
+const TYPICAL_SETS = 3;
+function workSlot(s, en) {
+  const k = slot(en); if (!s || k <= 1 || !known(en)) return k;
+  const g = getEx(en.exId)?.groupId; let sets = 0, n = 0;
+  for (const x of s.entries) {
+    if (x === en || getEx(x.exId)?.groupId !== g || !(+x.gpos > 0) || +x.gpos >= +en.gpos) continue;
+    const d = x.sets.filter(st => st.done).length;
+    sets += s.done ? d : Math.max(d, x.sets.length); n++;   // today: planned sets until more are ticked
+  }
+  if (n !== k - 1) return k;
+  return Math.min(Math.max(1 + sets / TYPICAL_SETS, 1), 5);
+}
+const fewerNote = (x, k) => x < k - 0.05 ? ' (fewer sets before)' : x > k + 0.05 ? ' (more sets before)' : '';
 // e1RM translated to "as if it was the first exercise for that muscle"
 const freshEq = h => h.best / fac(h.slot);
 // PR = best order-adjusted 1RM so far, compared with everything before that day
@@ -628,16 +658,19 @@ function recomputePRs() {
 }
 
 // What to aim for today. `last` is the newest session that wasn't an off day; `skipped` are the off days after it.
-function suggest(exId, k, sessionId, vid) {
+// k can be fractional (workSlot). mach (v7): build on the last time on the same machine, if there is one.
+function suggest(exId, k, sessionId, vid, mach) {
   const s = db.sessions.find(x => x.id === sessionId);
-  const h = logOf(exId, sessionId, s?.date, vid);
+  let h = logOf(exId, sessionId, s?.date, vid);
+  if (mach && h.some(x => x.en.mach === mach)) h = h.filter(x => x.en.mach === mach);   // weights feel different per machine
   if (!h.length) return null;
   const off = offFlags(h);
   const last = h.find(x => !off.has(x.en)) || h[0], ex = getEx(exId), inc = ex.inc || db.settings.inc || 2.5;
   const skipped = h.slice(0, h.indexOf(last)).map(x => ({x, why: off.get(x.en)}));
-  const ratio = last.known ? fac(k) / fac(last.slot) : 1;
+  const lastK = last.known ? workSlot(last.s, last.en) : last.slot;
+  const ratio = last.known ? facx(k) / facx(lastK) : 1;
   const topW = num(last.top.w), topR = num(last.top.r);
-  return {last, skipped, ratio, inc, same: !last.known || last.slot === k, w: roundTo(topW * ratio, inc), r: topR, topW, topR,
+  return {last, lastK, skipped, ratio, inc, same: !last.known || Math.abs(lastK - k) < 0.1 || roundTo(topW * ratio, inc) === roundTo(topW, inc), w: roundTo(topW * ratio, inc), r: topR, topW, topR,
           best: Math.max(...h.map(freshEq)), count: h.length};
 }
 // the variant to start with when an exercise is added: the one done last time
@@ -648,6 +681,24 @@ function placeholder(sug, i) {
   const p = ls[i] || ls[ls.length - 1];
   const w = sug.same ? num(p.w) : roundTo(num(p.w) * sug.ratio, sug.inc);
   return {w: fmt(w), r: String(p.r), prev: `${fmt(num(p.w))}×${p.r}`};
+}
+// the hints for all set rows of an entry: a set never suggests more weight than the set before it
+// (what was typed there, else its hint), even if last time a later set was heavier (v6)
+function placeholders(en, sug) {
+  let cap = Infinity;
+  return en.sets.map((st, i) => {
+    const p = placeholder(sug, i);
+    if (p.w !== '' && num(p.w) > cap) p.w = fmt(cap);
+    const here = st.w !== '' && isFinite(num(st.w)) ? num(st.w) : p.w !== '' ? num(p.w) : null;
+    if (here !== null) cap = here;
+    return p;
+  });
+}
+// refresh the weight hints of one gym exercise's set rows (while typing, so a lighter set 1 lowers set 2's hint)
+function gymHints(box, en) {
+  const s = getActive(), ex = getEx(en?.exId); if (!s || !ex || !box) return;
+  const vid = varsOf(ex).length ? vidOf(ex, en.vid) : undefined, ps = placeholders(en, suggest(en.exId, workSlot(s, en), s.id, vid, machOf(ex, en.mach)));
+  box.querySelectorAll('.set-row').forEach(o => { const p = ps[+o.dataset.i]; if (p) o.querySelector('[data-f="w"]').placeholder = p.w || 'kg'; });
 }
 
 /* ============ rendering ============ */
@@ -705,7 +756,7 @@ function renderSession(s) {
   const cards = s.entries.map(en => exerciseCard(s, en)).join('');
   return `
     <div class="sess-head">
-      <div><h1>${esc(title)}</h1><div class="meta">${esc(gymName(s.gym))} · ${fmtDate(s.date, true)} · <span id="elapsed" class="num">0:00</span></div></div>
+      <div><h1>${esc(title)}</h1><div class="meta">${esc(gymName(s.gym))} · ${fmtDate(s.date, true)} · <span id="elapsed" class="num">0:00</span><span id="left" class="num"></span></div></div>
       <button class="btn primary small" data-act="finish">Finish</button>
     </div>
     ${cards || `<div class="card empty" style="margin-bottom:12px">Add your first exercise. The order you add them in is the order the app assumes you did them — you can move them later.</div>`}
@@ -714,28 +765,32 @@ function renderSession(s) {
 }
 function exerciseCard(s, en) {
   const ex = getEx(en.exId) || {name: 'Deleted exercise', groupId: ''};
-  const k = slot(en), vars = varsOf(ex), vid = vars.length ? vidOf(ex, en.vid) : undefined;
-  const sug = getEx(en.exId) ? suggest(en.exId, k, s.id, vid) : null;
+  const k = slot(en), kw = workSlot(s, en), vars = varsOf(ex), vid = vars.length ? vidOf(ex, en.vid) : undefined;
+  const mach = machOf(ex, en.mach), sug = getEx(en.exId) ? suggest(en.exId, kw, s.id, vid, mach) : null;
   let hint;
   if (!sug) hint = `<div class="hint">First time logging this one${vid ? ` (${esc(varName(ex, vid))})` : ''} — find a good working weight.</div>`;
   else {
     const L = sug.last, sk = sug.skipped[0];
     // the newest session was an off day: say so, and offer to use it after all
     const offLine = sk ? `<span class="offnote">${fmtDate(sk.x.date)}: <span class="num">${esc(setsText(sk.x.en.sets))}</span> — ${sk.why === 'marked' ? 'marked as off day' : 'below your usual, looks like an off day'}${sug.skipped.length > 1 ? ` (+${sug.skipped.length - 1} more)` : ''}, so not used.<button class="mini" data-act="off-set" data-s="${sk.x.s.id}" data-e="${sk.x.en.id}">${sk.why === 'marked' ? 'Use it' : 'It was fine'}</button></span>` : '';
-    const lastLine = `${offLine}<b>${sk ? 'Based on' : 'Last'}</b> · ${fmtDate(L.date)}${L.known ? ' as ' + ord(L.slot) : ''}: <span class="num">${esc(setsText(L.en.sets))}</span>`;
+    const lm = machName(ex, L.en.mach);
+    const lastLine = `${offLine}<b>${sk ? 'Based on' : 'Last'}</b> · ${fmtDate(L.date)}${L.known ? ' as ' + ord(L.slot) : ''}${lm ? ' · ' + esc(lm) : ''}: <span class="num">${esc(setsText(L.en.sets))}</span>`;
     let goal;
     if (sug.same) goal = `Beat it: ${fmt(sug.topW)} × ${sug.topR + 1}  <small>or ${fmt(sug.topW + sug.inc)} × ${sug.topR}</small>`;
     else {
       const pct = Math.round((sug.ratio - 1) * 100);
-      goal = `Aim ~${fmt(sug.w)} × ${sug.r} <small>· ${ord(k)} today vs ${ord(L.slot)} last time (${pct > 0 ? '+' : ''}${pct}%)</small>`;
+      goal = `Aim ~${fmt(sug.w)} × ${sug.r} <small>· ${ord(k)} today${fewerNote(kw, k)} vs ${ord(L.slot)} last time${L.known ? fewerNote(sug.lastK, L.slot) : ''} (${pct > 0 ? '+' : ''}${pct}%)</small>`;
     }
     hint = `<div class="hint" data-act="ex-hist" data-x="${en.exId}" data-v="${vid || ''}"><span class="more">History ›</span>${lastLine}<span class="goal">${goal}</span></div>`;
   }
   const chips = vars.length ? `<div class="vchips" role="group" aria-label="Variant">${vars.map(v => `<button class="vchip" data-act="variant" data-en="${en.id}" data-v="${v.id}" aria-pressed="${v.id === vid}">${esc(v.name)}</button>`).join('')}
     <button class="vchip add" data-act="add-variant" data-x="${ex.id}" data-en="${en.id}" aria-label="Add variant">+</button></div>` : '';
+  const machChips = machsOf(ex).length ? `<div class="vchips" role="group" aria-label="Machine"><span class="vlabel">Machine</span>${machsOf(ex).map(m => `<button class="vchip" data-act="mach" data-en="${en.id}" data-m="${m.id}" aria-pressed="${m.id === mach}">${esc(m.name)}</button>`).join('')}
+    <button class="vchip add" data-act="add-mach" data-x="${ex.id}" data-en="${en.id}" aria-label="Add machine">+</button></div>` : '';
   const lastNote = sug?.last.en.note;
+  const ps = placeholders(en, sug);
   const rows = en.sets.map((st, i) => {
-    const p = placeholder(sug, i);
+    const p = ps[i];
     return `<div class="set-row ${st.done ? 'done' : ''}" data-en="${en.id}" data-i="${i}">
       <span class="idx">${i + 1}</span>
       <span class="prev num">${p.prev || '–'}</span>
@@ -757,6 +812,7 @@ function exerciseCard(s, en) {
       <button class="icon-btn" data-act="ex-menu" data-en="${en.id}" aria-label="Options">${ICON.dots}</button>
     </div>
     ${chips}
+    ${machChips}
     ${hint}
     ${ex.notes ? `<div class="hint" style="margin-top:6px">📌 ${esc(ex.notes)}</div>` : ''}
     ${getEx(en.exId) ? photoStrip(en.exId, false, {gym: s.gym, vid}) : ''}
@@ -1112,6 +1168,15 @@ function physioV5() {
       variants: [{id: 'lying', name: 'Lying', img: 'Lying_Leg_Curls'}, {id: 'seated', name: 'Seated', img: 'Seated_Leg_Curl'}]});
   db.physioV5 = true; save();
 }
+// v6: a two-arm seated Cable Row was only in the log from Manna (Other), so it was missing at the user's gyms.
+// Added once (db.cableRowV6) for the gym picked on the start screen, unless that gym already has one.
+function addCableRow() {
+  if (db.cableRowV6 || readOnly || !db.keepV2) return;   // Keep history not imported yet: runs again after the import
+  const gym = db.settings.gym || 'aalborg';
+  if (!db.exercises.some(e => /^(seated )?cable rows?$/i.test(e.name.replace(/\s*\((Manna|Hals|FW|Greece)\)$/, '').trim()) && (e.gym === gym || !e.gym)))
+    db.exercises.push({id: uid(), groupId: 'back', name: 'Cable Row', gym, notes: '', inc: 2.5, img: 'Seated_Cable_Rows'});
+  db.cableRowV6 = true; save();
+}
 // give exercises their standard picture (only ones that never had one, so a removed or changed picture stays that way)
 function applyPics() {
   if (readOnly) return;
@@ -1169,6 +1234,8 @@ function renderPhysioSession(a) {
     return `<article class="ex-card" id="pcard-${it.id}">
       <div class="ex-head"><div class="pos num">${i + 1}</div>
         <div class="ex-title"><h3>${esc(it.name)}</h3><div class="row"><span class="slot">Session #${(phLast(it)?.n || 0) + 1}</span></div></div>
+        <button class="icon-btn" data-act="ph-sess-move" data-x="${it.id}" data-d="-1" aria-label="Move up" ${i ? '' : 'disabled style="opacity:.25"'}>${ICON.up}</button>
+        <button class="icon-btn" data-act="ph-sess-move" data-x="${it.id}" data-d="1" aria-label="Move down" ${i < a.entries.length - 1 ? '' : 'disabled style="opacity:.25"'}>${ICON.down}</button>
         <button class="icon-btn" data-act="ph-hist" data-x="${it.id}" data-v="${vid || ''}" aria-label="History">${ICON.chart}</button></div>
       ${chips}
       ${hint}
@@ -1187,7 +1254,7 @@ function renderPhysioSession(a) {
       <div class="pset-btns"><button class="add-set" data-act="ph-add-set" data-x="${it.id}">+ Add set</button>
         ${rows.length > 1 ? `<button class="add-set" data-act="ph-del-set" data-x="${it.id}" aria-label="Remove last set">− Set</button>` : ''}</div></article>`;
   }).join('');
-  return `<div class="sess-head"><div><h1>${esc(p?.name || 'Physio')}</h1><div class="meta">Physio · ${esc(gymName(a.gym))} · ${fmtDate(a.date, true)} · <span id="elapsed" class="num">0:00</span></div></div>
+  return `<div class="sess-head"><div><h1>${esc(p?.name || 'Physio')}</h1><div class="meta">Physio · ${esc(gymName(a.gym))} · ${fmtDate(a.date, true)} · <span id="elapsed" class="num">0:00</span><span id="left" class="num"></span></div></div>
       <button class="btn primary small" data-act="ph-finish">Finish</button></div>
     ${p?.note ? `<div class="hint" style="margin:0 0 12px">📌 ${esc(p.note)}</div>` : ''}
     ${cards}
@@ -1426,7 +1493,9 @@ async function photoDay(file) {
   const s = m ? `${m[1]}-${m[2]}-${m[3]}` : (() => { const d = new Date(file.lastModified || Date.now()); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
   return isNaN(dateObj(s)) || s > today() ? today() : s;
 }
-async function addPhoto(owner, file) {
+// asPic {owner, vid}: the photo is the exercise's (or variant's) picture instead of the standard one — kept apart from
+// the other photos (pic: true), so it doesn't show twice
+async function addPhoto(owner, file, asPic) {
   let bmp;
   try { bmp = await createImageBitmap(file, {imageOrientation: 'from-image'}); }
   catch (e) { toast("Couldn't read that photo (HEIC? Turn off \"High efficiency pictures\" in the camera settings)"); return; }
@@ -1435,8 +1504,10 @@ async function addPhoto(owner, file) {
     const full = await shrink(bmp, 1600, 0.82), thumb = await shrink(bmp, 360, 0.72);
     bmp.close?.(); bmp = null;
     const p = {id: uid(), owner, date: await photoDay(file), t: Date.now(), gym: ui.photoGym || db.settings.gym};
+    if (asPic) p.pic = true;
     await idbTx(['photos', 'full'], 'readwrite', tx => { tx.objectStore('photos').put({...p, thumb}); tx.objectStore('full').put({id: p.id, blob: full}); });
     photos.unshift(p); photos.sort((a, b) => b.date.localeCompare(a.date) || b.t - a.t); thumbURL[p.id] = URL.createObjectURL(thumb);
+    if (asPic) { setPic(asPic.owner, asPic.vid, 'own:' + p.id); render(); return; }
     toast('Photo saved'); photoRefresh();
   } catch (e) { bmp?.close?.(); toast("Couldn't save that photo"); }
 }
@@ -1472,19 +1543,21 @@ function photoRefresh() {
 // the gym exercise ('<id>') or physio exercise ('ph:<id>') that photos and pictures belong to
 const ownerObj = o => String(o).startsWith('ph:') ? phItem(o.slice(3)).it : getEx(o);
 const GYM_SHORT = {aalborg: 'Aal', bronderslev: 'Brø', klarup: 'Kla', other: 'Oth'};
-// A row of thumbnails: the standard picture first, then your photos (+ camera button). opts.gym: during a session,
-// only that gym's photos (machines differ between gyms); opts.vid: the variant whose standard picture to show.
+// A row of thumbnails: the picture first (standard "how-to" one, or your own), then your photos (+ camera and gallery
+// buttons). opts.gym: during a session, only that gym's photos (machines differ between gyms); opts.vid: the variant
+// whose picture to show.
 function photoStrip(owner, canAdd, opts = {}) {
   const x = ownerObj(owner), rv = varsOf(x).length ? vidOf(x, opts.vid) : '', pic = picOf(x, rv), anyGym = x && !x.gym;
-  const mine = photos.filter(p => p.owner === owner && (!opts.gym || !p.gym || p.gym === opts.gym));
-  const std = pic ? `<button class="pthumb stock" data-act="pic" data-o="${esc(owner)}" data-v="${rv}" aria-label="Standard picture"><img src="${picURL(pic)}" alt="" loading="lazy" ${PIC_HERE.has(pic) ? '' : 'crossorigin="anonymous"'}><span class="tag">how-to</span></button>`
-    : canAdd && x ? `<button class="pthumb" data-act="pic-choose" data-o="${esc(owner)}" data-v="${rv}" aria-label="Pick a standard picture">${ICON.image}</button>` : '';
+  const mine = photos.filter(p => p.owner === owner && !p.pic && (!opts.gym || !p.gym || p.gym === opts.gym));
+  const std = pic ? `<button class="pthumb stock" data-act="pic" data-o="${esc(owner)}" data-v="${rv}" aria-label="Picture"><img src="${picURL(pic)}" alt="" loading="lazy" ${picCO(pic)}>${pic.startsWith('own:') ? '' : '<span class="tag">how-to</span>'}</button>`
+    : canAdd && x ? `<button class="pthumb" data-act="pic-choose" data-o="${esc(owner)}" data-v="${rv}" aria-label="Pick a picture">${ICON.image}</button>` : '';
   const th = mine.map(p => `<button class="pthumb" data-act="photo" data-id="${p.id}" aria-label="Photo from ${fmtDate(p.date)}"><img src="${thumbURL[p.id] || ''}" alt="">${anyGym && p.gym && !opts.gym ? `<span class="tag">${GYM_SHORT[p.gym] || ''}</span>` : ''}</button>`).join('');
   if (!std && !th && !canAdd) return '';
-  return `<div class="pstrip">${std}${th}${canAdd ? `<button class="pthumb" data-act="add-photo" data-o="${esc(owner)}" aria-label="Add photo">${ICON.camera}</button>` : ''}</div>`;
+  return `<div class="pstrip">${std}${th}${canAdd ? `<button class="pthumb" data-act="add-photo" data-o="${esc(owner)}" data-cam="1" aria-label="Take a photo">${ICON.camera}</button>
+    <button class="pthumb" data-act="add-photo" data-o="${esc(owner)}" aria-label="Add a photo from the gallery">${ICON.image}<span class="tag">gallery</span></button>` : ''}</div>`;
 }
 // small picture at the start of a list row
-const listThumb = (x, vid) => { const pic = picOf(x, vid); return pic ? `<img class="lthumb" src="${picURL(pic)}" alt="" loading="lazy" ${PIC_HERE.has(pic) ? '' : 'crossorigin="anonymous"'}>` : '<div class="lthumb"></div>'; };
+const listThumb = (x, vid) => { const pic = picOf(x, vid); return pic ? `<img class="lthumb" src="${picURL(pic)}" alt="" loading="lazy" ${picCO(pic)}>` : '<div class="lthumb"></div>'; };
 
 // the picture library (names of all ~870 pictures), loaded the first time it's needed
 let lib = null;
@@ -1511,15 +1584,41 @@ async function autoPic(x) {
   const best = libSearch(x.name, 1)[0], need = x.name.split(/\s+/).filter(w => w.length > 2).length;
   if (best && best.sc >= Math.max(3, need * 1.5)) { x.img = best.e[0]; save(); if (!document.activeElement?.matches('input,textarea,select')) photoRefresh(); }
 }
-// the standard picture big: start and end of the movement
+// is this picture id used by any exercise, variant or physio exercise?
+const picUsed = id => [...db.exercises, ...PH().programs.flatMap(p => p.items)].some(e => e.img === id || varsOf(e).some(v => v.img === id));
+// own-picture photos nothing refers to any more (e.g. a dropped variant's): deleted after the photos are loaded
+function dropUnusedPics() { if (!readOnly && photos.some(p => p.pic && !picUsed('own:' + p.id))) delPhotosOf(p => p.pic && !picUsed('own:' + p.id)); }
+// buttons that make a new photo (camera or gallery) the picture of an exercise / variant (v6)
+const ownPicBtns = (owner, vid) => `<div style="display:flex;gap:8px;margin-top:8px">
+    <button class="btn block" data-act="own-pic" data-o="${esc(owner)}" data-v="${vid || ''}" data-cam="1">${ICON.camera} Take my own</button>
+    <button class="btn block" data-act="own-pic" data-o="${esc(owner)}" data-v="${vid || ''}">${ICON.image} From gallery</button></div>`;
+// the picture big: the standard one shows start and end of the movement; your own photo is shown on its own
 function picSheet(owner, vid) {
   const x = ownerObj(owner), pic = picOf(x, vid); if (!pic) return;
-  const co = PIC_HERE.has(pic) ? '' : 'crossorigin="anonymous"';
+  if (pic.startsWith('own:')) {
+    const id = pic.slice(4);
+    openSheet(`<h3 style="margin-bottom:4px">${esc(exLabel(x, vid))}</h3>
+      <p class="explain" style="margin:0 0 12px;font-size:13px">Your own picture</p>
+      <div class="pview"><img id="pfull" src="${picURL(pic)}" alt="Picture"></div>
+      ${ownPicBtns(owner, vid)}
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="btn block" data-act="pic-choose" data-o="${esc(owner)}" data-v="${vid || ''}">${ICON.image} Library picture</button>
+        <button class="btn danger block" data-act="pic-set" data-o="${esc(owner)}" data-v="${vid || ''}" data-id="">${ICON.trash} Remove</button></div>
+      <button class="btn primary block" style="margin-top:8px" data-act="close-sheet">Close</button>`);
+    ui.photoView = id;
+    idbTx(['full'], 'readonly', tx => tx.objectStore('full').get(id)).then(r => {
+      const img = $('#pfull');
+      if (!r || !img || ui.photoView !== id) return;
+      const u = URL.createObjectURL(r.blob); img.onload = () => URL.revokeObjectURL(u); img.src = u;
+    }).catch(() => {});
+    return;
+  }
+  const co = picCO(pic);
   openSheet(`<h3 style="margin-bottom:4px">${esc(exLabel(x, vid))}</h3>
     <p class="explain" style="margin:0 0 12px;font-size:13px" id="picname">Standard picture: ${esc(libName(pic))}</p>
     <div class="picpair"><img src="${picURL(pic, 0)}" alt="Start" ${co}><img src="${picURL(pic, 1)}" alt="End" ${co}></div>
-    <p class="explain" style="margin:10px 0 0;font-size:13px">From a free exercise library — it shows the movement, not your gym's exact machine. Use the camera button for photos of the machine itself.</p>
-    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn block" data-act="pic-choose" data-o="${esc(owner)}" data-v="${vid || ''}">${ICON.image} Change</button>
+    <p class="explain" style="margin:10px 0 0;font-size:13px">From a free exercise library — it shows the movement, not your gym's exact machine. Swap it for your own photo of the machine:</p>
+    ${ownPicBtns(owner, vid)}
+    <div style="display:flex;gap:8px;margin-top:8px"><button class="btn block" data-act="pic-choose" data-o="${esc(owner)}" data-v="${vid || ''}">${ICON.image} Other library picture</button>
       <button class="btn danger block" data-act="pic-set" data-o="${esc(owner)}" data-v="${vid || ''}" data-id="">${ICON.trash} Remove</button></div>
     <button class="btn primary block" style="margin-top:8px" data-act="close-sheet">Close</button>`);
   if (!lib) loadLib().then(() => { const el = $('#picname'); if (el) el.textContent = 'Standard picture: ' + libName(pic); });
@@ -1529,6 +1628,8 @@ function picChooser(owner, vid) {
   const x = ownerObj(owner); if (!x) return;
   ui.picFor = {owner, vid};
   openSheet(`<h3 style="margin-bottom:4px">Picture for ${esc(exLabel(x, vid))}</h3>
+    ${ownPicBtns(owner, vid)}
+    <p class="explain" style="margin:10px 0 0;font-size:13px">…or pick one from the picture library:</p>
     <input class="search" type="search" placeholder="Search the picture library" value="${esc((x.name + ' ' + varName(x, vid)).replace(/\(.*?\)|[–—×]/g, ' ').replace(/\s+/g, ' ').trim())}" data-act-input="picsearch" style="margin-top:6px">
     <div id="picres"><div class="empty">Loading the library…</div></div>
     <button class="btn primary block" style="margin-top:12px" data-act="close-sheet">Cancel</button>`);
@@ -1543,13 +1644,15 @@ function picResults() {
 // set (or with id '' remove) the standard picture of an exercise or of one of its variants
 function setPic(owner, vid, id) {
   const x = ownerObj(owner); if (!x) return;
-  const va = varsOf(x).find(a => a.id === vid);
+  const va = varsOf(x).find(a => a.id === vid), old = va ? va.img : x.img;
   if (va) va.img = id; else x.img = id;
   save(); ui.redraw = true; closeSheet(); toast(id ? 'Picture set' : 'Picture removed');
+  // an own photo that was the picture and is now replaced or removed: delete it (it isn't one of the normal photos)
+  if (typeof old === 'string' && old.startsWith('own:') && old !== id && photos.find(p => p.id === old.slice(4))?.pic && !picUsed(old)) delPhoto(old.slice(4));
 }
 function photoSheet(id) {
   const p = photos.find(x => x.id === id); if (!p) return;
-  const same = photos.filter(x => x.owner === p.owner), i = same.indexOf(p), older = same[i + 1], newer = same[i - 1];
+  const same = photos.filter(x => x.owner === p.owner && !x.pic), i = same.indexOf(p), older = same[i + 1], newer = same[i - 1];
   openSheet(`<div class="pview"><img id="pfull" src="${thumbURL[id] || ''}" alt="Photo from ${fmtDate(p.date)}"></div>
     <div class="pnav"><button class="btn" data-act="photo" data-id="${older?.id || ''}" ${older ? '' : 'disabled'}>‹ Older</button>
       <div class="num">${fmtDate(p.date, true)}${p.gym && p.owner !== 'body' ? ' · ' + esc(gymName(p.gym)) : ''}<br><small>${i + 1} of ${same.length}</small></div>
@@ -1568,7 +1671,8 @@ function renderBodyPhotos() {
   return `<button class="back" data-act="back">${ICON.back} Progress</button>
     <h1>Body photos</h1>
     <p class="sub">Newest first. Tap one to see it big and step through the others. Stored on this phone only — not in the backup file.</p>
-    <button class="btn primary block" style="margin-top:12px" data-act="add-photo" data-o="body">${ICON.camera} Add photo</button>
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn primary block" data-act="add-photo" data-o="body" data-cam="1">${ICON.camera} Take photo</button>
+      <button class="btn block" data-act="add-photo" data-o="body">${ICON.image} From gallery</button></div>
     ${list.length ? `<div class="pgrid">${list.map(p => `<button class="pcell" data-act="photo" data-id="${p.id}"><img src="${thumbURL[p.id] || ''}" alt=""><span>${fmtDate(p.date)}</span></button>`).join('')}</div>`
       : '<div class="empty">No photos yet.</div>'}`;
 }
@@ -1674,6 +1778,16 @@ function applyVariants(x, raw) {
   return kept.length ? `Kept ${kept.map(v => v.name).join(', ')} — it has logged sets` : '';
 }
 // quick "add a variant" from a workout card
+// v7: add a machine (e.g. which cable station). Suggestions then build on the last time on the same machine.
+function machSheet(exId, enId) {
+  const ex = getEx(exId); if (!ex) return;
+  openSheet(`<h3>Add a machine</h3>
+    <p class="explain" style="margin:0 0 12px">E.g. two cable stations that feel different with the same weight. Pick the one you use on the workout card; the suggestion then builds on the last time on that machine.${machsOf(ex).length ? ` Now: ${esc(machsOf(ex).map(m => m.name).join(', '))}.` : ''}</p>
+    <form id="machForm" data-x="${ex.id}" data-en="${enId || ''}">
+      <label class="field"><span>Machine</span><input name="name" required placeholder="e.g. Cable by the window"></label>
+      <button class="btn primary block" type="submit">Add</button>
+    </form>`);
+}
 function variantSheet(exId, enId) {
   const ex = getEx(exId); if (!ex) return;
   const has = varsOf(ex).length;
@@ -1712,7 +1826,9 @@ function doMerge(src, t, tName, sName) {
   const map = {}, sv = varsOf(src);
   for (const v of sv) map[v.id] = byName(v.name, 'img' in v ? v.img : src.img);
   const one = sv.length ? null : byName(sName, src.img);
-  for (const en of entriesOf(src)) { en.vid = one || map[vidOf(src, en.vid)]; en.exId = t.id; }
+  const mmap = {};   // v7: machines move along (same name = same machine)
+  for (const m of machsOf(src)) { let tm = machsOf(t).find(a => a.name.toLowerCase() === m.name.toLowerCase()); if (!tm) { tm = {id: uid(), name: m.name}; (t.machines ||= []).push(tm); } mmap[m.id] = tm.id; }
+  for (const en of entriesOf(src)) { en.vid = one || map[vidOf(src, en.vid)]; en.exId = t.id; if (en.mach) { if (mmap[en.mach]) en.mach = mmap[en.mach]; else delete en.mach; } }
   if (t.variants.length < 2) { delete t.variants; entriesOf(t).forEach(en => { delete en.vid; }); }   // both got the same name
   if (!t.notes && src.notes) t.notes = src.notes;
   db.exercises = db.exercises.filter(e => e.id !== src.id);
@@ -1787,6 +1903,7 @@ function addEntry(exId) {
   const n = sug ? Math.max(1, sug.last.en.sets.filter(x => x.done).length) : 3;
   const en = {id: uid(), exId, note: '', sets: Array.from({length: n}, () => ({w: '', r: '', done: false}))};
   if (vid) en.vid = vid;
+  const lm = machOf(getEx(exId), logOf(exId, s.id, s.date)[0]?.en.mach); if (lm) en.mach = lm;   // v7: same machine as last time
   s.entries.push(en); save(); closeSheet(); render();
   requestAnimationFrame(() => $('#card-' + en.id)?.scrollIntoView({behavior: 'smooth', block: 'center'}));
 }
@@ -1832,9 +1949,10 @@ function exportData() {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
-$('#photoFile').addEventListener('change', ev => {
-  const f = ev.target.files[0], owner = ui.photoOwner; ev.target.value = '';
-  if (f && owner) addPhoto(owner, f);
+// #photoFile = the gallery, #photoCam = the camera straight away (v6). ui.photoAsPic: the photo becomes the exercise's picture
+for (const inp of [$('#photoFile'), $('#photoCam')]) inp.addEventListener('change', ev => {
+  const f = ev.target.files[0], owner = ui.photoOwner, asPic = ui.photoAsPic; ev.target.value = ''; ui.photoAsPic = null;
+  if (f && owner) addPhoto(owner, f, asPic);
 });
 $('#importFile').addEventListener('change', async ev => {
   const f = ev.target.files[0]; ev.target.value = '';
@@ -1848,7 +1966,7 @@ $('#importFile').addEventListener('change', async ev => {
     if (!ok) throw new Error('bad');
     confirmSheet('Replace all data?', `The backup has ${d.sessions.filter(s => s.done).length} workouts and ${d.exercises.length} exercises. It replaces what is on this phone now${PH().programs.length && !d.physio ? ' — physio sessions logged in the app are not in it and will be lost' : ''}.`, 'Replace', () => {
       try { localStorage.setItem(KEY + '.before-import', JSON.stringify(db)); } catch (e) {}
-      leaveDetail(); db = d; db.physio ||= {programs: [], active: null}; addPhysioPress(); physioV5(); applyPics(); computeFactors(); recomputePRs(); save(); ui.tab = 'train'; render(); renderRest(); toast('Backup restored'); importPhysio();
+      leaveDetail(); db = d; db.physio ||= {programs: [], active: null}; addPhysioPress(); physioV5(); addCableRow(); applyPics(); computeFactors(); recomputePRs(); save(); ui.tab = 'train'; render(); renderRest(); toast('Backup restored'); importPhysio();
     });
   } catch (e) { toast('That file is not a Liftbook backup'); }
 });
@@ -1875,7 +1993,7 @@ function restNotify() {
     if (end && end > Date.now())
       return reg.showNotification('Liftbook rest', {tag: 'lb-rest', silent: true, renotify: true,
         body: `REST ${Math.round((end - Date.now()) / 1000)} s · until ${new Date(end).toLocaleTimeString('en-GB')}`});
-    if (!end) return reg.getNotifications({tag: 'lb-rest'}).then(ns => ns.forEach(n => n.close()));
+    if (!end || end <= Date.now()) return reg.getNotifications({tag: 'lb-rest'}).then(ns => ns.forEach(n => n.close()));
   }).catch(() => {});
 }
 function renderRest() {
@@ -1904,6 +2022,49 @@ function renderRest() {
 function tickClock() {
   const s = getActive() || PH().active, el = $('#elapsed');
   if (s && el && s.start) { const m = Math.floor((Date.now() - s.start) / 60000); el.textContent = m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} min`; }
+  const lt = $('#left');
+  if (lt) { const m = timeLeft(); lt.textContent = m === null ? '' : m < 1 ? ' · almost done' : ` · ~${Math.round(m)} min left`; }
+}
+
+/* ============ time left (v6) ============ */
+// Rough time left of the running session = sets still to do × your time per set.
+// Time per set: your finished in-app workouts' length ÷ their sets (median of the last 10; until there are any, the rest
+// timer + 45 s), moved toward today's own pace once a few sets are ticked off.
+// Gym sets still to do: the unticked sets on the cards, plus the exercises you usually still add — your last 5 workouts
+// with the same muscle groups tell how many exercises (and sets each) such a workout has.
+const median = a => { const b = [...a].sort((x, y) => x - y), m = b.length >> 1; return b.length ? b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2 : null; };
+const groupKey = gs => [...(gs || [])].sort().join('+');
+let leftMemo = {v: -1};
+function leftHistory() {
+  if (leftMemo.v === dataV) return leftMemo;
+  const done = db.sessions.filter(s => s.done).sort((a, b) => (b.end || 0) - (a.end || 0) || b.date.localeCompare(a.date));
+  const per = done.filter(s => s.start && s.end && s.src !== 'keep').map(s => (s.end - s.start) / 1000 / Math.max(1, s.entries.reduce((n, en) => n + en.sets.length, 0)))
+    .filter(x => x >= 30 && x <= 600).slice(0, 10);
+  const typ = {};
+  for (const s of done) {
+    const k = groupKey(s.groups); if (!k || !s.entries.length) continue;
+    const t = typ[k] ||= {n: [], sets: []};
+    if (t.n.length < 5) { t.n.push(s.entries.length); t.sets.push(...s.entries.map(en => en.sets.length)); }
+  }
+  for (const k in typ) typ[k] = {n: Math.round(median(typ[k].n)), sets: Math.round(median(typ[k].sets))};
+  return (leftMemo = {v: dataV, pace: median(per), typ});
+}
+// minutes left, or null when there is nothing to estimate (no session, editing an old one, all sets done)
+function timeLeft() {
+  const s = getActive(), a = !s && PH().active;
+  if ((!s && !a) || (s && db.editBackup?.id === s.id)) return null;
+  const h = leftHistory();
+  let todo = 0, done = 0;
+  if (s) {
+    for (const en of s.entries) for (const st of en.sets) st.done ? done++ : todo++;
+    const t = h.typ[groupKey(s.groups)];
+    if (t) todo += Math.max(0, t.n - s.entries.length) * t.sets;
+  } else for (const en of a.entries) for (const r of en.rows || []) r.done ? done++ : todo++;
+  if (!todo) return null;
+  let pace = h.pace || (db.settings.rest || 120) + 45;
+  const start = (s || a).start;
+  if (start && done >= 3) pace = ((Date.now() - start) / 1000 + 4 * pace) / (done + 4);   // today's pace = time so far ÷ sets done, weighted by sets done
+  return todo * pace / 60;
 }
 setInterval(() => {
   if (db.rest) renderRest();
@@ -1959,16 +2120,33 @@ document.addEventListener('click', ev => {
     case 'ph-add-ex': phAddSheet(); break;
     case 'ph-add-to': {
       const a = PH().active, {it} = phItem(el.dataset.x); if (!a || !it) { closeSheet(); break; }
-      a.entries.push(phNewEntry(it)); save(); closeSheet(); render();
+      // v7: goes where it sits in the program (not always at the bottom); the arrows on the card move it further
+      const pi = x => p0 ? p0.items.findIndex(y => y.id === x) : -1, p0 = phProg(a.progId), at = pi(it.id);
+      const j = at < 0 ? -1 : a.entries.findIndex(e => pi(e.itemId) > at);
+      a.entries.splice(j < 0 ? a.entries.length : j, 0, phNewEntry(it)); save(); closeSheet(); render();
       requestAnimationFrame(() => $('#pcard-' + it.id)?.scrollIntoView({behavior: 'smooth', block: 'center'}));
       break;
     }
     case 'ph-move': phMove(el.dataset.x, +el.dataset.d); break;
+    case 'ph-sess-move': {   // v7: order of today's physio session
+      const a = PH().active; if (!a) break;
+      const i = a.entries.findIndex(e => e.itemId === el.dataset.x), j = i + +el.dataset.d;
+      if (i < 0 || j < 0 || j >= a.entries.length) break;
+      [a.entries[i], a.entries[j]] = [a.entries[j], a.entries[i]]; save(); render();
+      requestAnimationFrame(() => $('#pcard-' + el.dataset.x)?.scrollIntoView({block: 'center'}));
+      break;
+    }
     case 'pic': picSheet(el.dataset.o, el.dataset.v || undefined); break;
     case 'pic-choose': picChooser(el.dataset.o, el.dataset.v || undefined); break;
     case 'pic-set': setPic(el.dataset.o, el.dataset.v || undefined, el.dataset.id); break;
     case 'variant': { const en = findEntry(el.dataset.en); if (!en) break; en.vid = el.dataset.v; save(); render(); break; }
     case 'add-variant': variantSheet(el.dataset.x, el.dataset.en); break;
+    case 'add-mach': machSheet(el.dataset.x, el.dataset.en); break;
+    case 'mach': {   // tap the chosen machine again = not noted
+      const en = findEntry(el.dataset.en); if (!en) break;
+      if (en.mach === el.dataset.m) delete en.mach; else en.mach = el.dataset.m;
+      save(); render(); break;
+    }
     case 'detail-var': ui.detailVid = el.dataset.v; ui.sel = null; render(); break;
     case 'merge-ex': mergePicker(el.dataset.x); break;
     case 'merge-pick': mergeForm(el.dataset.x, el.dataset.t); break;
@@ -1996,9 +2174,14 @@ document.addEventListener('click', ev => {
     }
     case 'photo': photoSheet(el.dataset.id); break;
     case 'add-photo':
-      ui.photoOwner = el.dataset.o; ui.photoGym = getActive()?.gym || PH().active?.gym || ownerObj(el.dataset.o)?.gym || db.settings.gym;
+      ui.photoOwner = el.dataset.o; ui.photoAsPic = null; ui.photoGym = getActive()?.gym || PH().active?.gym || ownerObj(el.dataset.o)?.gym || db.settings.gym;
       if (ui.sheetOpen && !ui.sheetPh) closeSheet();   // e.g. the exercise menu; a physio sheet stays open and shows the new photo
-      $('#photoFile').click(); break;
+      $(el.dataset.cam ? '#photoCam' : '#photoFile').click(); break;   // data-cam: open the camera straight away
+    case 'own-pic':   // a new photo (camera or gallery) becomes the picture of the exercise / variant
+      ui.photoOwner = el.dataset.o; ui.photoAsPic = {owner: el.dataset.o, vid: el.dataset.v || undefined};
+      ui.photoGym = getActive()?.gym || PH().active?.gym || ownerObj(el.dataset.o)?.gym || db.settings.gym;
+      closeSheet();
+      $(el.dataset.cam ? '#photoCam' : '#photoFile').click(); break;
     case 'del-photo': { const id = el.dataset.id; confirmSheet('Delete photo?', 'It is removed from Liftbook on this phone.', 'Delete', () => delPhoto(id)); break; }
     case 'ph-finish': phFinish(); break;
     case 'ph-discard': confirmSheet('Discard session?', 'Nothing from this physio session will be saved.', 'Discard', () => { PH().active = null; db.rest = null; save(); render(); renderRest(); }); break;
@@ -2037,7 +2220,11 @@ document.addEventListener('click', ev => {
       if (ex.gym && ex.gym !== g) {
         const base = ex.gym === 'other' ? ex.name.replace(/ \((Manna|Hals|FW|Greece)\)$/, '') : ex.name;
         let mine = db.exercises.find(e => e.gym === g && e.groupId === ex.groupId && e.name.toLowerCase() === base.toLowerCase());
-        if (!mine) { mine = {...ex, id: uid(), gym: g, name: base, notes: ''}; if (ex.variants) mine.variants = ex.variants.map(v => ({...v})); db.exercises.push(mine); toast(`Added ${mine.name} to ${gymName(g)}`); }
+        if (!mine) { mine = {...ex, id: uid(), gym: g, name: base, notes: ''}; if (ex.variants) mine.variants = ex.variants.map(v => ({...v}));
+          delete mine.machines;   // v7: machines belong to the other gym
+          // your own picture is a photo of the other gym's machine (and belongs to that exercise): the copy doesn't take it
+          for (const o of [mine, ...varsOf(mine)]) if (String(o.img).startsWith('own:')) delete o.img;
+          db.exercises.push(mine); toast(`Added ${mine.name} to ${gymName(g)}`); }
         addEntry(mine.id);
       } else addEntry(ex.id);
       break;
@@ -2050,7 +2237,7 @@ document.addEventListener('click', ev => {
       if (ri.value === '' && ri.placeholder && isFinite(num(ri.placeholder))) ri.value = ri.placeholder;
       if (!isFinite(num(wi.value)) || !(num(ri.value) > 0)) { toast('Enter weight and reps first'); (isFinite(num(wi.value)) ? ri : wi).focus(); break; }
       st.w = wi.value.replace(',', '.'); st.r = String(Math.round(num(ri.value))); st.done = true;
-      row.classList.add('done'); save(); startRest();
+      row.classList.add('done'); save(); startRest(); gymHints(row.parentElement, en);
       try { navigator.vibrate?.(15); } catch (e) {}
       break;
     }
@@ -2064,8 +2251,11 @@ document.addEventListener('click', ev => {
         ${i > 0 ? `<button class="opt" data-act="move" data-en="${en.id}" data-d="-1">${ICON.up} Move earlier</button>` : ''}
         ${i < s.entries.length - 1 ? `<button class="opt" data-act="move" data-en="${en.id}" data-d="1">${ICON.down} Move later</button>` : ''}
         ${en.sets.length > 1 ? `<button class="opt" data-act="del-set" data-en="${en.id}">${ICON.trash} Remove last set</button>` : ''}
-        ${getEx(en.exId) ? `<button class="opt" data-act="add-photo" data-o="${en.exId}">${ICON.camera} Add photo (machine, seat, grip…)</button>
-          <button class="opt" data-act="add-variant" data-x="${en.exId}" data-en="${en.id}">${ICON.plus} Add variant (grip, lying/seated…)</button>` : ''}
+        ${getEx(en.exId) ? `<button class="opt" data-act="add-photo" data-o="${en.exId}" data-cam="1">${ICON.camera} Take a photo (machine, seat, grip…)</button>
+          <button class="opt" data-act="add-photo" data-o="${en.exId}">${ICON.image} Add a photo from the gallery</button>
+          <button class="opt" data-act="pic-choose" data-o="${en.exId}" data-v="${varsOf(getEx(en.exId)).length ? vidOf(getEx(en.exId), en.vid) : ''}">${ICON.image} Change the picture (your own photo or the library)</button>
+          <button class="opt" data-act="add-variant" data-x="${en.exId}" data-en="${en.id}">${ICON.plus} Add variant (grip, lying/seated…)</button>
+          <button class="opt" data-act="add-mach" data-x="${en.exId}" data-en="${en.id}">${ICON.plus} Which machine (cable 1, cable 2…)</button>` : ''}
         <button class="opt" data-act="off-toggle" data-en="${en.id}">${ICON.down} ${en.off === true ? 'Undo off day' : 'Off day — don\'t build on this next time'}</button>
         <button class="opt" data-act="detail" data-x="${en.exId}">${ICON.chart} See progress</button>
         <button class="opt danger" data-act="remove-entry" data-en="${en.id}">${ICON.trash} Remove from workout</button>`);
@@ -2138,7 +2328,7 @@ document.addEventListener('click', ev => {
     }
     case 'export': exportData(); break;
     case 'import': $('#importFile').click(); break;
-    case 'reset': confirmSheet('Erase everything?', 'All exercises, workouts and photos on this phone will be deleted. Export a backup first if you might want them (photos are not in the backup).', 'Erase', () => { leaveDetail(); delPhotosOf(() => true); try { localStorage.setItem(KEY + '.before-erase', JSON.stringify(db)); } catch (e) {} db = {v: 1, exercises: [], sessions: [], active: null, rest: null, keepV2: true, physio: {programs: [], active: null}, physioV1: true, settings: db.settings}; computeFactors(); save(); ui.tab = 'train'; render(); renderRest(); }); break;
+    case 'reset': confirmSheet('Erase everything?', 'All exercises, workouts and photos on this phone will be deleted. Export a backup first if you might want them (photos are not in the backup).', 'Erase', () => { leaveDetail(); delPhotosOf(() => true); try { localStorage.setItem(KEY + '.before-erase', JSON.stringify(db)); } catch (e) {} db = {v: 1, exercises: [], sessions: [], active: null, rest: null, keepV2: true, cableRowV6: true, physio: {programs: [], active: null}, physioV1: true, settings: db.settings}; computeFactors(); save(); ui.tab = 'train'; render(); renderRest(); }); break;
     case 'rest-add': db.rest.end += +el.dataset.v * 1000; save(); restEl.dataset.mode = ''; renderRest(); break;
     case 'rest-stop': db.rest = null; save(); restEl.dataset.mode = ''; renderRest(); break;
   }
@@ -2153,7 +2343,7 @@ document.addEventListener('input', ev => {
     const p = phProg(el.dataset.p); if (p) { p[el.dataset.actInput === 'ph-pnote' ? 'note' : 'name'] = el.value; save(); ui.redraw = true; }
   } else if (el.dataset.f) {
     const row = el.closest('.set-row'), en = findEntry(row.dataset.en);
-    if (en) { en.sets[+row.dataset.i][el.dataset.f] = el.value; save(); }
+    if (en) { en.sets[+row.dataset.i][el.dataset.f] = el.value; save(); if (el.dataset.f === 'w') gymHints(row.parentElement, en); }
   } else if (el.dataset.actInput === 'note') { const en = findEntry(el.dataset.en); if (en) { en.note = el.value; save(); } }
   else if (el.dataset.actInput === 'exsearch') { ui.exQuery = el.value; $('#exlist').innerHTML = exRows(); }
   else if (el.dataset.actInput === 'picksearch') { $('#picklist').innerHTML = pickList(el.value); }
@@ -2204,6 +2394,16 @@ document.addEventListener('submit', ev => {
     computeFactors(); recomputePRs(); save(); closeSheet(); render(); toast(msg || `Added ${name}`);
     return;
   }
+  if (ev.target.id === 'machForm') {
+    ev.preventDefault();
+    const f = new FormData(ev.target), ex = getEx(ev.target.dataset.x); if (!ex) { closeSheet(); return; }
+    const name = String(f.get('name') || '').trim(); if (!name) return;
+    if (machsOf(ex).some(m => m.name.toLowerCase() === name.toLowerCase())) { toast('That machine already exists'); return; }
+    const m = {id: uid(), name}; (ex.machines ||= []).push(m);
+    const en = findEntry(ev.target.dataset.en); if (en) en.mach = m.id;   // today you're on the new one
+    save(); closeSheet(); render(); toast(`Added ${name}`);
+    return;
+  }
   if (ev.target.id === 'mergeForm') {
     ev.preventDefault();
     const f = new FormData(ev.target), src = getEx(ev.target.dataset.x), t = getEx(ev.target.dataset.t);
@@ -2240,11 +2440,11 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ============ boot ============ */
-computeFactors(); recomputePRs(); addPhysioPress(); physioV5(); applyPics();
+computeFactors(); recomputePRs(); addPhysioPress(); physioV5(); addCableRow(); applyPics();
 if (getActive() || PH().active) ui.tab = 'train';
 render(); renderRest();
 importKeep().then(importPhysio);
-loadPhotos().then(() => { if (photos.length) photoRefresh(); });
+loadPhotos().then(() => { dropUnusedPics(); if (photos.length) photoRefresh(); });
 try { navigator.storage?.persist?.(); } catch (e) {}
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
