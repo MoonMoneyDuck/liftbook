@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rclone drive sync – privacy</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1d1d1f; --muted: #5f6368; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #16171a; --fg: #e8e8ea; --muted: #a0a4ab; } }
+  body { background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, sans-serif; margin: 0; padding: 32px 16px; }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>rclone drive sync</h1>
+  <p class="muted">A private, single-user tool. Last updated 8 November 2026.</p>
+
+  <p>"rclone drive sync" is the name of a Google Cloud OAuth client used by one person to keep a folder on their own
+  computer in sync with their own Google Drive, using the open-source program
+  <a href="https://rclone.org/">rclone</a>. It is not a public service, and nobody else can sign up for it.</p>
+
+  <h2>Privacy policy</h2>
+  <ul>
+    <li><strong>What is accessed:</strong> the owner's own Google Drive files, only so they can be copied between that
+      Google Drive and the owner's own computer.</li>
+    <li><strong>Where the data goes:</strong> nowhere else. Files travel directly between Google Drive and the owner's
+      computer. No server, database or third party receives them.</li>
+    <li><strong>What is collected:</strong> nothing. No analytics, no tracking, no logs are sent anywhere.</li>
+    <li><strong>Sharing or selling:</strong> no data is shared with or sold to anyone.</li>
+    <li><strong>Revoking access:</strong> access can be removed at any time at
+      <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
+  </ul>
+
+  <p>The use of information received from Google APIs adheres to the
+  <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+  including the Limited Use requirements.</p>
+</main>
+</body>
+</html>
