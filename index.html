@@ -761,6 +761,7 @@ function renderSession(s) {
     </div>
     ${cards || `<div class="card empty" style="margin-bottom:12px">Add your first exercise. The order you add them in is the order the app assumes you did them — you can move them later.</div>`}
     <button class="add-ex" data-act="add-ex">${ICON.plus} Add exercise</button>
+    ${s.entries.length ? `<button class="btn primary block" style="margin-top:14px" data-act="finish">Finish workout</button>` : ''}
     <div style="text-align:center;margin-top:18px"><button class="link" data-act="cancel-session">${db.editBackup?.id === s.id ? 'Cancel edit' : 'Discard workout'}</button></div>`;
 }
 function exerciseCard(s, en) {
@@ -1259,6 +1260,7 @@ function renderPhysioSession(a) {
     ${p?.note ? `<div class="hint" style="margin:0 0 12px">📌 ${esc(p.note)}</div>` : ''}
     ${cards}
     <button class="add-ex" data-act="ph-add-ex">${ICON.plus} Add exercise</button>
+    <button class="btn primary block" style="margin-top:14px" data-act="ph-finish">Finish session</button>
     <p class="explain" style="text-align:center;margin-top:14px">Only ticked exercises are saved — skip any you don't do today.</p>
     <div style="text-align:center;margin-top:6px"><button class="link" data-act="ph-discard">Discard session</button></div>`;
 }
@@ -1281,18 +1283,35 @@ function phFinish(force) {
     if (vid) e.vid = vid;
     if (sets.some(s => s.w !== top.w || s.v !== top.v)) e.list = sets;
     if (en.note.trim()) e.note = en.note.trim();
-    it.log.push(e); out.push({it, e, up: B && e.w > (num(B.w) || 0)});
+    it.log.push(e); out.push({it, e, ...phProgress(it, vid, e, B)});
   }
   if (!out.length) { toast('Tick off at least one exercise first'); return; }
   PH().active = null; db.rest = null; save(); render(); renderRest();
   // each exercise can be marked as an off day here (a low one is spotted on its own)
   openSheet(`<h3>Physio done 💪</h3><div class="pr-list offlist">${out.map(o => {
       const why = phOffFlags(phLog(o.it, phVid(o.it, o.e.vid))).get(o.e);
-      return `<div class="row-item">${o.up ? '<span class="badge-pr" style="margin:0">UP</span>' : ''}
+      return `<div class="row-item">${o.badge ? `<span class="badge-pr" style="margin:0">${o.badge}</span>` : ''}
       <div class="grow"><div class="t">${esc(exLabel(o.it, o.e.vid))}</div><div class="s num">#${o.e.n} · ${esc(phText(o.e))}</div>
         ${why === 'auto' ? '<div class="s">Fewer than last time — next time builds on the session before.</div>' : ''}</div>
       <button class="mini" data-act="ph-off" data-x="${o.it.id}" data-n="${o.e.n}" data-s="${o.e.sid}" data-v="${why === 'auto' ? '0' : '1'}">${why === 'auto' ? 'It was fine' : 'Off day'}</button></div>`; }).join('')}</div>
     <button class="btn primary block" style="margin-top:8px" data-act="close-sheet">Nice</button>`);
+}
+// The badge in the "Physio done" list (10 Nov 2026). Before, only more kg gave a badge ("UP"), so more reps or
+// seconds at the same weight looked like no progress. Now:
+//   PR  = better than every earlier session of this exercise (more kg, or the same top kg for more reps/seconds)
+//   UP  = more kg than last time (but not a PR, e.g. after a break)
+//   +2 / +5 s = same kg as last time, more reps / seconds (but not a PR)
+function phProgress(it, vid, e, B) {
+  const prev = phLog(it, vid).filter(x => x !== e && x.u === e.u && x.v != null);
+  const w = num(e.w) || 0;
+  const maxW = prev.length ? Math.max(...prev.map(x => num(x.w) || 0)) : -1;
+  const maxV = Math.max(0, ...prev.filter(x => (num(x.w) || 0) === maxW).map(x => num(x.v) || 0));
+  if (prev.length && (w > maxW || (w === maxW && num(e.v) > maxV))) return {badge: 'PR'};
+  if (!B || B.u !== e.u) return {};
+  const bw = num(B.w) || 0, dv = num(e.v) - (num(B.v) || 0);
+  if (w > bw) return {badge: 'UP'};
+  if (w === bw && dv > 0) return {badge: '+' + fmt(dv) + (e.u === 'sec' ? ' s' : '')};
+  return {};
 }
 // add a program exercise (another gym's, an old version) or a new one to today's session
 function phAddSheet() {
