@@ -761,7 +761,7 @@ function renderSession(s) {
     </div>
     ${cards || `<div class="card empty" style="margin-bottom:12px">Add your first exercise. The order you add them in is the order the app assumes you did them — you can move them later.</div>`}
     <button class="add-ex" data-act="add-ex">${ICON.plus} Add exercise</button>
-    ${s.entries.length ? `<button class="btn primary block" style="margin-top:14px" data-act="finish">Finish workout</button>` : ''}
+    ${s.entries.length ? `<button class="btn primary block" style="margin-top:14px" data-act="finish">${db.editBackup?.id === s.id ? 'Save changes' : 'Finish workout'}</button>` : ''}
     <div style="text-align:center;margin-top:18px"><button class="link" data-act="cancel-session">${db.editBackup?.id === s.id ? 'Cancel edit' : 'Discard workout'}</button></div>`;
 }
 function exerciseCard(s, en) {
@@ -1307,9 +1307,9 @@ function phProgress(it, vid, e, B) {
   const maxW = prev.length ? Math.max(...prev.map(x => num(x.w) || 0)) : -1;
   const maxV = Math.max(0, ...prev.filter(x => (num(x.w) || 0) === maxW).map(x => num(x.v) || 0));
   if (prev.length && (w > maxW || (w === maxW && num(e.v) > maxV))) return {badge: 'PR'};
-  if (!B || B.u !== e.u) return {};
-  const bw = num(B.w) || 0, dv = num(e.v) - (num(B.v) || 0);
-  if (w > bw) return {badge: 'UP'};
+  if (!B || B.u !== e.u || B.v == null) return {};
+  const bw = num(B.w) || 0, dv = num(e.v) - num(B.v);
+  if (w > bw && !(it.lo && num(e.v) < it.lo)) return {badge: 'UP'};   // a heavy set below the range isn't the new level
   if (w === bw && dv > 0) return {badge: '+' + fmt(dv) + (e.u === 'sec' ? ' s' : '')};
   return {};
 }
