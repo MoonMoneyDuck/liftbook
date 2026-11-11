@@ -1209,7 +1209,7 @@ function renderPhysioStart() {
 }
 function phStart(pid) {
   const p = phProg(pid), gym = db.settings.gym; if (!p) return;
-  if (getActive()) { toast('Finish the gym workout first'); return; }
+  if (getActive()) { if (!checkStale(true)) toast('Finish the gym workout first'); return; }
   PH().active = {id: uid(), progId: p.id, date: today(), gym, start: Date.now(), entries: p.items.filter(it => phHere(it, gym)).map(phNewEntry)};
   save(); render(); window.scrollTo(0, 0);
 }
@@ -2308,7 +2308,7 @@ document.addEventListener('click', ev => {
     case 'session': sessionSheet(db.sessions.find(s => s.id === el.dataset.s)); break;
     case 'del-session': { const id = el.dataset.s; confirmSheet('Delete workout?', 'This removes it from your history.', 'Delete', () => { db.sessions = db.sessions.filter(s => s.id !== id); computeFactors(); recomputePRs(); save(); render(); }); break; }
     case 'edit-session': {
-      if (getActive() || PH().active) { closeSheet(); toast('Finish the current workout first'); break; }
+      if (getActive() || PH().active) { closeSheet(); if (!checkStale(true)) toast('Finish the current workout first'); break; }
       const s = db.sessions.find(x => x.id === el.dataset.s);
       db.editBackup = JSON.parse(JSON.stringify(s));
       s.done = false; db.active = s.id; computeFactors(); save(); closeSheet(); ui.tab = 'train'; render(); break;
@@ -2454,14 +2454,82 @@ document.addEventListener('submit', ev => {
 let lastCheck = Date.now();
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
-  renderRest(); tickClock();
+  renderRest(); tickClock(); checkStale();
   if (Date.now() - lastCheck > 60000 && navigator.serviceWorker?.controller) { lastCheck = Date.now(); fetch('./', {cache: 'no-cache'}).catch(() => {}); }
 });
+
+/* ============ unfinished workout (v9) ============ */
+// A gym workout or physio session where Finish was never pressed: when Liftbook is opened (or comes back to the
+// screen) and nothing in it changed for 3 hours, a sheet offers Save it (every set with numbers, ticked or not,
+// keeps the session's own date) / Keep going / Discard. `touched` = time of the last tap or typing in the session.
+const STALE_MS = 3 * 3600e3;
+let staleAsked = null;
+function openWork() {
+  const s = getActive(); if (s) return db.editBackup?.id === s.id ? null : {kind: 'gym', s};
+  const a = PH().active; return a ? {kind: 'ph', s: a} : null;
+}
+function touchWork(e) {
+  if (e && e.target.closest?.('.sheet')) return;
+  const w = openWork(); if (w) w.s.touched = Date.now();   // stored by the save() the handler does next
+}
+document.addEventListener('input', touchWork, true);
+document.addEventListener('click', e => { if (e.target.closest?.('[data-act]')) touchWork(e); }, true);
+function filledSets(w) {
+  if (w.kind === 'gym') return w.s.entries.reduce((n, en) => n + en.sets.filter(st => st.done || (num(st.r) > 0 && isFinite(num(st.w)))).length, 0);
+  return w.s.entries.reduce((n, en) => n + (en.rows || []).filter(r => r.done || num(r.v) > 0).length, 0);
+}
+function checkStale(force) {
+  const w = openWork(); if (!w || (ui.sheetOpen && !force)) return false;
+  const last = w.s.touched || w.s.start || 0;
+  if (Date.now() - last < STALE_MS) return false;
+  const key = w.s.id + ':' + last;
+  if (!force && staleAsked === key) return false;
+  staleAsked = key;
+  const name = w.kind === 'ph' ? `${phProg(w.s.progId)?.name || 'Physio'} (physio)` : 'Gym workout';
+  const n = filledSets(w);
+  openSheet(`<h3>Unfinished workout</h3>
+    <p class="explain"><b>${esc(name)}</b> from ${esc(fmtDate(w.s.date, true))} is still open: Finish was never pressed. Last change ${esc(new Date(last).toLocaleString('en-GB', {weekday: 'short', hour: '2-digit', minute: '2-digit'}))}.</p>
+    <p class="explain">${n ? `${n} set${n > 1 ? 's have' : ' has'} numbers. <b>Save it</b> keeps all of them, ticked or not, dated ${esc(fmtDate(w.s.date))}.` : 'No sets have numbers yet.'}</p>
+    ${n ? '<button class="btn primary block" style="margin-top:12px" data-act="stale-save">Save it</button>' : ''}
+    <div style="display:flex;gap:8px;margin-top:8px"><button class="btn block" data-act="stale-keep">Keep going</button><button class="btn danger block" data-act="stale-discard">Discard</button></div>`);
+  return true;
+}
+function staleSave() {
+  const w = openWork(); if (!w) return;
+  if (w.kind === 'gym') {
+    for (const en of w.s.entries) for (const st of en.sets) if (!st.done && num(st.r) > 0 && isFinite(num(st.w))) st.done = true;
+    w.s.end = w.s.end || w.s.touched || Date.now();
+    finishSession();
+  } else {
+    for (const en of w.s.entries) { const {it} = phItem(en.itemId); if (it) phRows(en, it); for (const r of (en.rows || [])) if (!r.done && num(r.v) > 0) r.done = true; }
+    phFinish(true);
+  }
+}
+function staleDiscard() {
+  const w = openWork(); if (!w) return;
+  if (w.kind === 'gym') { db.sessions = db.sessions.filter(x => x.id !== w.s.id); db.active = null; }
+  else PH().active = null;
+  db.rest = null; save(); render(); renderRest(); toast('Discarded');
+}
+// a sheet action that may open the next sheet (the finish summary) in the same history entry, like confirm-ok
+function staleAct(f) {
+  hideSheet(); ui.reuseEntry = true;
+  try { f(); } finally { ui.reuseEntry = false; }
+  if (!ui.sheetOpen) silentBack();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest?.('[data-act^="stale-"]'); if (!b) return;
+  e.stopPropagation();
+  const act = b.dataset.act;
+  if (act === 'stale-save') staleAct(staleSave);
+  else if (act === 'stale-keep') { const w = openWork(); if (w) { w.s.touched = Date.now(); save(); } closeSheet(); }
+  else if (act === 'stale-discard') confirmSheet('Discard it?', 'Nothing from this session will be saved.', 'Discard', staleDiscard);
+}, true);
 
 /* ============ boot ============ */
 computeFactors(); recomputePRs(); addPhysioPress(); physioV5(); addCableRow(); applyPics();
 if (getActive() || PH().active) ui.tab = 'train';
-render(); renderRest();
+render(); renderRest(); checkStale();
 importKeep().then(importPhysio);
 loadPhotos().then(() => { dropUnusedPics(); if (photos.length) photoRefresh(); });
 try { navigator.storage?.persist?.(); } catch (e) {}
