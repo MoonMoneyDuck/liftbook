@@ -90,6 +90,7 @@ h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .ex-title{flex:1;min-width:0}
 .ex-title .row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
 .slot{font-size:12px;color:var(--text-2);font-weight:600}
+.tempo-tag{font-size:12px;font-weight:800;color:var(--accent-ink);background:var(--accent);border-radius:999px;padding:2px 8px}
 .hint{margin:12px 0 4px;padding:10px 12px;border-radius:12px;background:var(--surface-2);font-size:14px;color:var(--text-2)}
 .hint b{color:var(--text)}
 .hint .goal{display:block;margin-top:4px;color:var(--accent);font-weight:700}
@@ -1105,15 +1106,29 @@ function ruleText(it) {
   if (it.unit === 'sec') return it.lo && it.hi ? `${fmt(it.lo)}–${fmt(it.hi)} s, then +${fmt(it.step)} kg` : 'add 5 s each time';
   return it.lo && it.hi ? `${fmt(it.lo)}–${fmt(it.hi)} reps, then +${fmt(it.step)} kg` : 'add a rep each time';
 }
+// v10: a variant can start from another one's level (3 s eccentric: v.from = the normal variant, v.pct = 0.8).
+// No sessions in it yet → pct × the other variant's last normal weight (rounded to the item's kg step), bottom of the rep range.
+function phSeed(it, vid) {
+  const va = varsOf(it).find(v => v.id === vid);
+  if (!va?.from || !(va.pct > 0) || va.from === vid) return null;
+  const B = phBase(it, va.from), w = num(B?.w);
+  if (!B || !(w > 0) || B.u !== it.unit) return null;
+  const step = it.step > 0 ? it.step : 0.5;
+  const sw = Math.max(step, Math.round(w * va.pct / step) * step);
+  return {w: va.pct <= 1 ? Math.min(w, sw) : sw, v: it.lo || (it.unit === 'sec' ? 30 : 8), u: it.unit, seed: va.pct, base: B, fromVid: va.from};
+}
+// the variant a new session starts with: a "start with" variant (it.startVid) until it has been logged once, else last time's
+const phStartVid = it => { const s = it.startVid; return s && varsOf(it).some(v => v.id === s) && !phLog(it, s).length ? s : phLastVid(it); };
 // one step on from last time: +1 rep / +5 s, or at the top of the range add weight and start again at the bottom
 function phNext(it, vid) {
-  const L = phBase(it, vid); if (!L) return null;
+  const L = phBase(it, vid); if (!L) return phSeed(it, vid);
   const w = num(L.w) || 0;
   if (L.u !== it.unit || L.v == null) return {w, v: it.lo || (it.unit === 'sec' ? 30 : 8), u: it.unit};
   if (it.lo && it.hi && L.v >= it.hi && it.step > 0) return {w: w + it.step, v: it.lo, u: it.unit, up: true};
   return {w, v: L.v + (it.unit === 'sec' ? 5 : 1), u: it.unit};
 }
-const phSets = (it, vid) => [...phLog(it, vid)].reverse().find(e => e.sets)?.sets || 3;
+const phSets = (it, vid) => { const f = v => [...phLog(it, v)].reverse().find(e => e.sets)?.sets;
+  const from = varsOf(it).find(v => v.id === vid)?.from; return f(vid) || (from && from !== vid ? f(from) : 0) || 3; };
 // one row per set, each with its own kg and reps/seconds. Sessions started before this had one row plus a "sets" count.
 function phRows(en, it) {
   if (!en.rows) {
@@ -1169,6 +1184,23 @@ function physioV5() {
       variants: [{id: 'lying', name: 'Lying', img: 'Lying_Leg_Curls'}, {id: 'seated', name: 'Seated', img: 'Seated_Leg_Curl'}]});
   db.physioV5 = true; save();
 }
+// v10 (18 Nov 2026): the physio now wants a 3-second eccentric (lowering) in the shoulder program. Each rep exercise there
+// gets a "3 s down" variant: own suggestions/badges, first session at 80% of the normal weight, and sessions start with it.
+// The old sets stay as the first variant ("Normal"). Timed holds have no lowering phase, so they are left alone.
+function physioTempo() {
+  const sh = phProg('nicklas-shoulders');
+  if (db.physioTempo || readOnly || !sh) return;   // programs not imported yet: runs again after the import
+  for (const it of sh.items) {
+    if (it.retired || it.unit !== 'reps' || varsOf(it).some(v => v.tempo)) continue;
+    if (!varsOf(it).length) it.variants = [{id: 'normal', name: 'Normal'}];
+    const from = it.variants[0].id;
+    it.variants.push({id: 'slow3', name: '3 s down', tempo: 3, from, pct: 0.8});
+    it.startVid = 'slow3';
+    // a session already open switches over too, unless numbers were already typed for this exercise
+    if (PH().active) for (const en of PH().active.entries) if (en.itemId === it.id && !en.done && !(en.rows || []).some(r => r.done || r.w !== '' || r.v !== '')) en.vid = 'slow3';
+  }
+  db.physioTempo = true; save();
+}
 // v6: a two-arm seated Cable Row was only in the log from Manna (Other), so it was missing at the user's gyms.
 // Added once (db.cableRowV6) for the gym picked on the start screen, unless that gym already has one.
 function addCableRow() {
@@ -1192,7 +1224,7 @@ function renderPhysioStart() {
   const gym = db.settings.gym;
   const cards = PH().programs.map(p => {
     const items = p.items.filter(it => phHere(it, gym)), ld = phLastDate(p);
-    const rows = items.map(it => { const v = phLastVid(it), L = phLast(it, v), nx = phNext(it, v); return `<button class="row-item" data-act="ph-hist" data-x="${it.id}">
+    const rows = items.map(it => { const v = phStartVid(it), L = phLast(it, v), nx = phNext(it, v); return `<button class="row-item" data-act="ph-hist" data-x="${it.id}">
         <div class="grow"><div class="t">${esc(exLabel(it, v))}</div><div class="s num">${L ? `#${L.n} · ${esc(phText(L, true))}` : 'not logged yet'}</div></div>
         ${nx ? `<div class="r num" style="color:var(--accent);font-weight:700">→ ${esc(phText(nx, true))}</div>` : ''}</button>`; }).join('');
     return `<div class="card ph-card">
@@ -1215,7 +1247,7 @@ function phStart(pid) {
 }
 // a session entry for one physio exercise: the variant done last time, as many sets as last time
 function phNewEntry(it) {
-  const vid = phLastVid(it), en = {itemId: it.id, note: '', rows: Array.from({length: phSets(it, vid)}, () => ({w: '', v: '', done: false}))};
+  const vid = phStartVid(it), en = {itemId: it.id, note: '', rows: Array.from({length: phSets(it, vid)}, () => ({w: '', v: '', done: false}))};
   if (vid) en.vid = vid;
   return en;
 }
@@ -1230,11 +1262,14 @@ function renderPhysioSession(a) {
     const offLine = offWhyL ? `<span class="offnote">#${last.n}: <span class="num">${esc(phText(last))}</span> — ${offWhyL === 'marked' ? 'marked as off day' : 'fewer than the time before, looks like an off day'}, so not used.<button class="mini" data-act="ph-off" data-x="${it.id}" data-n="${last.n}" data-s="${last.sid || ''}" data-v="0">${offWhyL === 'marked' ? 'Use it' : 'It was fine'}</button></span>` : '';
     const hint = L ? `<div class="hint" data-act="ph-hist" data-x="${it.id}" data-v="${vid || ''}"><span class="more">History ›</span>${offLine}<b>${offLine ? 'Based on' : 'Last'}</b> · #${L.n}${L.date ? ' · ' + fmtDate(L.date) : ''}: <span class="num">${esc(phText(L))}</span>
         <span class="goal">${nx.up ? 'Level up: ' : 'Next: '}${esc(phText(nx))} <small>· ${esc(ruleText(it))}</small></span></div>`
+      : nx?.seed ? `<div class="hint" data-act="ph-hist" data-x="${it.id}" data-v="${nx.fromVid}"><span class="more">History ›</span><b>First time ${esc(varName(it, vid))}</b> · ${esc(varName(it, nx.fromVid))} last: <span class="num">${esc(phText(nx.base))}</span>
+        <span class="goal">Start: ${esc(phText(nx))} <small>· ${Math.round(nx.seed * 100)}% of ${esc(varName(it, nx.fromVid))} · ${esc(ruleText(it))}</small></span></div>`
       : `<div class="hint">First time${vid ? ` (${esc(varName(it, vid))})` : ''} — ${esc(ruleText(it))}.</div>`;
+    const tempo = varsOf(it).find(v => v.id === vid)?.tempo;
     const chips = vid ? `<div class="vchips" role="group" aria-label="Variant">${varsOf(it).map(v => `<button class="vchip" data-act="ph-variant" data-x="${it.id}" data-v="${v.id}" aria-pressed="${v.id === vid}">${esc(v.name)}</button>`).join('')}</div>` : '';
     return `<article class="ex-card" id="pcard-${it.id}">
       <div class="ex-head"><div class="pos num">${i + 1}</div>
-        <div class="ex-title"><h3>${esc(it.name)}</h3><div class="row"><span class="slot">Session #${(phLast(it)?.n || 0) + 1}</span></div></div>
+        <div class="ex-title"><h3>${esc(it.name)}</h3><div class="row"><span class="slot">Session #${(phLast(it)?.n || 0) + 1}</span>${tempo ? `<span class="tempo-tag">↓ ${fmt(tempo)} s down</span>` : ''}</div></div>
         <button class="icon-btn" data-act="ph-sess-move" data-x="${it.id}" data-d="-1" aria-label="Move up" ${i ? '' : 'disabled style="opacity:.25"'}>${ICON.up}</button>
         <button class="icon-btn" data-act="ph-sess-move" data-x="${it.id}" data-d="1" aria-label="Move down" ${i < a.entries.length - 1 ? '' : 'disabled style="opacity:.25"'}>${ICON.down}</button>
         <button class="icon-btn" data-act="ph-hist" data-x="${it.id}" data-v="${vid || ''}" aria-label="History">${ICON.chart}</button></div>
@@ -1349,7 +1384,7 @@ function phChart(log) {
 function physioSheet(id, keepScroll, vid) {
   const {p, it} = phItem(id); if (!it) return;
   if (!varsOf(it).some(v => v.id === vid)) vid = undefined;   // undefined = all variants together
-  const top = sheet.scrollTop, log = phLog(it, vid), L = log[log.length - 1], nx = phNext(it, vid ?? phLastVid(it));
+  const top = sheet.scrollTop, log = phLog(it, vid), L = log[log.length - 1], nx = phNext(it, vid ?? phStartVid(it));
   const first = log.find(e => e.w > 0), dated = log.filter(e => e.sid).length;
   const recent = log.slice().reverse().slice(0, ui.phAll ? log.length : 8);
   const byW = log.some(e => e.w > 0), off = new Map();
@@ -1366,7 +1401,7 @@ function physioSheet(id, keepScroll, vid) {
         <div class="stat"><div class="k">Sessions</div><div class="v num">${log.length}</div><div class="d">${dated ? dated + ' logged in the app' : 'all from Keep'}</div></div>
         <div class="stat"><div class="k">Last</div><div class="v num" style="font-size:19px">${esc(phText(L, true)) || '–'}</div><div class="d">#${L.n}${L.date ? ' · ' + fmtDate(L.date) : ''}</div></div>
         ${first && L.w > 0 ? `<div class="stat"><div class="k">Weight</div><div class="v num">${fmt(first.w)}→${fmt(L.w)}<small> kg</small></div><div class="d">since #${first.n}</div></div>` : ''}
-        ${nx && !it.retired ? `<div class="stat"><div class="k">Next${mixed ? ' · ' + esc(varName(it, phLastVid(it))) : ''}</div><div class="v num" style="font-size:19px;color:var(--accent)">${esc(phText(nx, true))}</div><div class="d">${nx.up ? 'level up' : 'one step on'}</div></div>` : ''}
+        ${nx && !it.retired ? `<div class="stat"><div class="k">Next${mixed ? ' · ' + esc(varName(it, phStartVid(it))) : ''}</div><div class="v num" style="font-size:19px;color:var(--accent)">${esc(phText(nx, true))}</div><div class="d">${nx.seed ? Math.round(nx.seed * 100) + '% of ' + esc(varName(it, nx.fromVid)) : nx.up ? 'level up' : 'one step on'}</div></div>` : ''}
       </div>
       <div class="card chart-card" style="margin-bottom:12px"><div class="ct">Progress</div>
         <div class="cs">${byW ? 'Weight' : it.unit === 'sec' ? 'Seconds' : 'Reps'} per session. Tap a point to see that session.</div>${phChart(log)}</div>
@@ -1375,7 +1410,7 @@ function physioSheet(id, keepScroll, vid) {
           <span>${e.gym && !it.gym ? `<span class="ord">${esc(gymName(e.gym))}</span>` : ''}${e.date ? `<button class="mini" data-act="ph-off" data-x="${it.id}" data-n="${e.n}" data-s="${e.sid || ''}" data-v="${off.get(e) === 'auto' ? '0' : '1'}">${off.get(e) === 'auto' ? 'It was fine' : e.off === true ? 'Not off' : 'Off day'}</button>` : ''}</span></div>
         <div class="l2 num">${esc(phText(e)) || '–'}</div>${e.note ? `<div class="l3">${esc(e.note)}</div>` : ''}</div>`).join('')}</div>
       ${log.length > recent.length ? `<button class="btn block" style="margin-top:12px" data-act="ph-all" data-x="${it.id}">Show all ${log.length}</button>` : ''}`
-    : '<div class="empty">No sessions yet.</div>'}
+    : `<div class="empty">No sessions yet.${nx && !it.retired ? `<br>Start: <b class="num">${esc(phText(nx, true))}</b>${nx.seed ? ` (${Math.round(nx.seed * 100)}% of ${esc(varName(it, nx.fromVid))})` : ''}` : ''}</div>`}
     <div style="display:flex;gap:8px;margin-top:12px"><button class="btn block" data-act="ph-edit" data-x="${it.id}">${ICON.edit} Edit</button>
       <button class="btn primary block" data-act="close-sheet">${PH().active ? 'Back to session' : 'Close'}</button></div>`);
   ui.sheetPh = id; ui.sheetPhVid = vid;
@@ -1465,7 +1500,7 @@ async function importPhysio() {
   if (!data || !Array.isArray(data.programs) || !data.programs.every(p => p && p.id && Array.isArray(p.items) && p.items.every(it => it && it.id && Array.isArray(it.log)))) return;
   const have = new Set(PH().programs.map(p => p.id));
   PH().programs.push(...data.programs.filter(p => !have.has(p.id)));
-  db.physioV1 = true; save(); addPhysioPress(); physioV5(); applyPics();
+  db.physioV1 = true; save(); addPhysioPress(); physioV5(); physioTempo(); applyPics();
   if (!getActive() && !PH().active && !ui.sheetOpen && ui.tab !== 'detail') render();
   toast('Physio programs added — switch to Physio on the Train tab');
 }
@@ -1783,6 +1818,10 @@ function applyVariants(x, raw) {
   const next = names.map(n => {
     let v = same(n) || renames[fresh.indexOf(n)];
     v = v ? {...v, name: n} : {id: uid(), name: n};
+    if (v.tempo && v.name !== same(n)?.name) {   // renamed tempo variant ("4 s down" → 4 s); a name without seconds drops the tempo + 80% start
+      const t = /(\d+(?:[.,]\d+)?)\s*s\b/i.exec(n);
+      if (t) v.tempo = num(t[1].replace(',', '.')); else { delete v.tempo; delete v.from; delete v.pct; }
+    }
     taken.add(v.id); return v;
   });
   const kept = old.filter(o => !taken.has(o.id) && used.has(o.id));
@@ -1794,6 +1833,7 @@ function applyVariants(x, raw) {
     x.variants = next;
     if (!first) ens.forEach(en => { en.vid = next[0].id; });   // what was logged so far = the first variant
   }
+  if (x.startVid && !varsOf(x).some(v => v.id === x.startVid)) delete x.startVid;
   return kept.length ? `Kept ${kept.map(v => v.name).join(', ')} — it has logged sets` : '';
 }
 // quick "add a variant" from a workout card
@@ -1985,7 +2025,7 @@ $('#importFile').addEventListener('change', async ev => {
     if (!ok) throw new Error('bad');
     confirmSheet('Replace all data?', `The backup has ${d.sessions.filter(s => s.done).length} workouts and ${d.exercises.length} exercises. It replaces what is on this phone now${PH().programs.length && !d.physio ? ' — physio sessions logged in the app are not in it and will be lost' : ''}.`, 'Replace', () => {
       try { localStorage.setItem(KEY + '.before-import', JSON.stringify(db)); } catch (e) {}
-      leaveDetail(); db = d; db.physio ||= {programs: [], active: null}; addPhysioPress(); physioV5(); addCableRow(); applyPics(); computeFactors(); recomputePRs(); save(); ui.tab = 'train'; render(); renderRest(); toast('Backup restored'); importPhysio();
+      leaveDetail(); db = d; db.physio ||= {programs: [], active: null}; addPhysioPress(); physioV5(); physioTempo(); addCableRow(); applyPics(); computeFactors(); recomputePRs(); save(); ui.tab = 'train'; render(); renderRest(); toast('Backup restored'); importPhysio();
     });
   } catch (e) { toast('That file is not a Liftbook backup'); }
 });
@@ -2527,7 +2567,7 @@ document.addEventListener('click', e => {
 }, true);
 
 /* ============ boot ============ */
-computeFactors(); recomputePRs(); addPhysioPress(); physioV5(); addCableRow(); applyPics();
+computeFactors(); recomputePRs(); addPhysioPress(); physioV5(); physioTempo(); addCableRow(); applyPics();
 if (getActive() || PH().active) ui.tab = 'train';
 render(); renderRest(); checkStale();
 importKeep().then(importPhysio);
