@@ -309,9 +309,14 @@ div.lthumb{border:1px dashed var(--line)}
     <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="var(--accent)"/><rect x="14" y="36" width="9" height="14" rx="3" fill="var(--accent-ink)"/><rect x="27.5" y="26" width="9" height="24" rx="3" fill="var(--accent-ink)"/><rect x="41" y="14" width="9" height="36" rx="3" fill="var(--accent-ink)"/></svg>
     Liftbook
   </div>
+  <div style="display:flex;gap:2px">
+  <button class="icon-btn" data-act="feedback" aria-label="Feedback for Claude">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  </button>
   <button class="icon-btn" data-act="settings" aria-label="Settings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
   </button>
+  </div>
 </header>
 
 <main id="view"></main>
@@ -1120,13 +1125,21 @@ function phSeed(it, vid) {
 // the variant a new session starts with: a "start with" variant (it.startVid) until it has been logged once, else last time's
 const phStartVid = it => { const s = it.startVid; return s && varsOf(it).some(v => v.id === s) && !phLog(it, s).length ? s : phLastVid(it); };
 // one step on from last time: +1 rep / +5 s, or at the top of the range add weight and start again at the bottom
+// v11: every session of the exercise counts, whichever variant: Lying → Seated → Seated → Lying = +3 reps for Lying
+// (the 2 Seated sessions in between also trained the muscle). Past the top of the range = add weight instead.
+const phBetween = (it, vid, L) => { if (!vid || !L) return []; const i = it.log.indexOf(L);
+  return i < 0 ? [] : it.log.slice(i + 1).filter(e => vidOf(it, e.vid) !== vid); };
 function phNext(it, vid) {
   const L = phBase(it, vid); if (!L) return phSeed(it, vid);
-  const w = num(L.w) || 0;
+  const btw = phBetween(it, vid, L), gap = btw.length, steps = 1 + gap, w = num(L.w) || 0;
+  const gapBy = gap ? [...new Set(btw.map(e => varName(it, e.vid)))].join('/') : '';
   if (L.u !== it.unit || L.v == null) return {w, v: it.lo || (it.unit === 'sec' ? 30 : 8), u: it.unit};
-  if (it.lo && it.hi && L.v >= it.hi && it.step > 0) return {w: w + it.step, v: it.lo, u: it.unit, up: true};
-  return {w, v: L.v + (it.unit === 'sec' ? 5 : 1), u: it.unit};
+  const v = L.v + steps * (it.unit === 'sec' ? 5 : 1);
+  if (it.lo && it.hi && v > it.hi && it.step > 0) return {w: w + it.step, v: it.lo, u: it.unit, up: true, gap, gapBy};
+  return {w, v, u: it.unit, gap, gapBy};
 }
+// "· +2: 2× Seated in between" next to the suggestion
+const phGapText = nx => nx?.gap ? ` · ${nx.gap}× ${nx.gapBy} in between` : '';
 const phSets = (it, vid) => { const f = v => [...phLog(it, v)].reverse().find(e => e.sets)?.sets;
   const from = varsOf(it).find(v => v.id === vid)?.from; return f(vid) || (from && from !== vid ? f(from) : 0) || 3; };
 // one row per set, each with its own kg and reps/seconds. Sessions started before this had one row plus a "sets" count.
@@ -1261,7 +1274,7 @@ function renderPhysioSession(a) {
     const offWhyL = last && last !== L ? phOffFlags(log).get(last) : null;
     const offLine = offWhyL ? `<span class="offnote">#${last.n}: <span class="num">${esc(phText(last))}</span> — ${offWhyL === 'marked' ? 'marked as off day' : 'fewer than the time before, looks like an off day'}, so not used.<button class="mini" data-act="ph-off" data-x="${it.id}" data-n="${last.n}" data-s="${last.sid || ''}" data-v="0">${offWhyL === 'marked' ? 'Use it' : 'It was fine'}</button></span>` : '';
     const hint = L ? `<div class="hint" data-act="ph-hist" data-x="${it.id}" data-v="${vid || ''}"><span class="more">History ›</span>${offLine}<b>${offLine ? 'Based on' : 'Last'}</b> · #${L.n}${L.date ? ' · ' + fmtDate(L.date) : ''}: <span class="num">${esc(phText(L))}</span>
-        <span class="goal">${nx.up ? 'Level up: ' : 'Next: '}${esc(phText(nx))} <small>· ${esc(ruleText(it))}</small></span></div>`
+        <span class="goal">${nx.up ? 'Level up: ' : 'Next: '}${esc(phText(nx))} <small>· ${esc(ruleText(it))}${esc(phGapText(nx))}</small></span></div>`
       : nx?.seed ? `<div class="hint" data-act="ph-hist" data-x="${it.id}" data-v="${nx.fromVid}"><span class="more">History ›</span><b>First time ${esc(varName(it, vid))}</b> · ${esc(varName(it, nx.fromVid))} last: <span class="num">${esc(phText(nx.base))}</span>
         <span class="goal">Start: ${esc(phText(nx))} <small>· ${Math.round(nx.seed * 100)}% of ${esc(varName(it, nx.fromVid))} · ${esc(ruleText(it))}</small></span></div>`
       : `<div class="hint">First time${vid ? ` (${esc(varName(it, vid))})` : ''} — ${esc(ruleText(it))}.</div>`;
@@ -1926,7 +1939,7 @@ function settingsSheet() {
       <p class="explain" style="margin:0 0 8px">Everything lives only on this phone. Export a backup now and then (e.g. to Google Drive). Photos are not in the backup file — they live only in the app. A picture taken from inside Liftbook is not saved to your gallery, so for body photos you want to keep for sure, take them with the camera app and pick them from the gallery.</p>
       <div style="display:flex;gap:8px"><button class="btn block" data-act="export">Export</button><button class="btn block" data-act="import">Import</button></div></div>
     <div style="margin-top:18px"><button class="btn danger block" data-act="reset">Erase all data</button></div>
-    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v5.0 · works offline<br><small>Standard exercise pictures: free-exercise-db (public domain)</small></p>`);
+    <p class="explain" style="text-align:center;margin-top:14px">Liftbook v11 · works offline<br><small>Standard exercise pictures: free-exercise-db (public domain)</small></p>`);
 }
 
 // is this entry an off day? ('marked', 'auto' or undefined)
@@ -2374,6 +2387,10 @@ document.addEventListener('click', ev => {
       break;
     }
     case 'settings': settingsSheet(); break;
+    case 'feedback': feedbackSheet(); break;
+    case 'fb-retry': fbFlush(true); closeSheet(); break;
+    case 'fb-key': { const v = $('#fbKey').value.trim(); if (!v) break; localStorage.setItem(FB_KEY, v); toast('Key saved');
+      const draft = $('#fbForm textarea')?.value || ''; feedbackSheet(); $('#fbForm textarea').value = draft; fbFlush(true); break; }
     case 'set-rest': db.settings.rest = +el.dataset.v; save(); settingsSheet(); break;
     case 'rest-alert': {
       if (!el.checked) { db.settings.restAlert = false; save(); break; }
@@ -2422,6 +2439,13 @@ document.addEventListener('keydown', ev => {
   else { ev.target.blur(); row.querySelector('.chk').click(); }
 });
 document.addEventListener('submit', ev => {
+  if (ev.target.id === 'fbForm') {
+    ev.preventDefault();
+    const t = new FormData(ev.target).get('t').trim(); if (!t) { toast('Type something first'); return; }
+    const d = new Date(), id = d.toISOString().replace(/[:.]/g, '-') + '-' + Math.random().toString(36).slice(2, 6);
+    fbSetQueue([...fbQueue(), {id, when: d.toLocaleString('en-GB'), text: t, ctx: fbContext(), v: APP_V}]);
+    closeSheet(); fbFlush(true); return;
+  }
   if (ev.target.id === 'phForm') {
     ev.preventDefault();
     const f = new FormData(ev.target), p = phProg(ev.target.dataset.p), id = ev.target.dataset.x;
@@ -2498,6 +2522,56 @@ document.addEventListener('visibilitychange', () => {
   if (Date.now() - lastCheck > 60000 && navigator.serviceWorker?.controller) { lastCheck = Date.now(); fetch('./', {cache: 'no-cache'}).catch(() => {}); }
 });
 
+/* ============ feedback for Claude (v11) ============ */
+// 💬 in the top bar: type or dictate feedback. It goes to the PRIVATE GitHub repo MoonMoneyDuck/app-data as
+// liftbook/feedback/<time>.md, where Claude reads it. The key (fine-grained token, app-data only) lives only in
+// localStorage 'liftbook.fbkey' — not in this public code, not in the backup file. No signal = queued, sent later.
+const FB_REPO = 'MoonMoneyDuck/app-data', FB_KEY = 'liftbook.fbkey', FB_Q = 'liftbook.fbqueue', APP_V = 'v11';
+const fbQueue = () => { try { return JSON.parse(localStorage.getItem(FB_Q)) || []; } catch { return []; } };
+const fbSetQueue = q => localStorage.setItem(FB_Q, JSON.stringify(q));
+function fbContext() {
+  const s = getActive(), a = PH().active;
+  if (s) return 'during a gym workout: ' + s.entries.map(en => exLabel(getEx(en.exId), en.vid)).join(', ');
+  if (a) return 'during a physio session: ' + a.entries.map(en => exLabel(phItem(en.itemId).it, en.vid)).join(', ');
+  return (phMode() ? 'physio' : 'gym') + ' mode, ' + ui.tab + ' tab';
+}
+const b64 = t => { let b = ''; for (const c of new TextEncoder().encode(t)) b += String.fromCharCode(c); return btoa(b); };
+let fbBusy = false;
+async function fbFlush(loud) {
+  const key = localStorage.getItem(FB_KEY);
+  if (!fbQueue().length) return;
+  if (fbBusy) { if (loud) toast('Sending…'); return; }
+  if (!key) { if (loud) toast('Saved on the phone — the feedback key is not set yet'); return; }
+  fbBusy = true;
+  try {
+    for (let f; (f = fbQueue()[0]); ) {   // oldest first, until empty (also picks up items added while sending)
+      const body = `# Liftbook feedback — ${f.when}\n\n${f.text}\n\n---\n- Where: ${f.ctx}\n- App: Liftbook ${f.v}\n`;
+      const r = await fetch(`https://api.github.com/repos/${FB_REPO}/contents/liftbook/feedback/${f.id}.md`, {method: 'PUT',
+        headers: {Authorization: 'Bearer ' + key, Accept: 'application/vnd.github+json'}, body: JSON.stringify({message: 'Liftbook feedback', content: b64(body)})});
+      // 422 "sha wasn't supplied" = that file is already there (sent before, but the answer got lost); other 422s are errors
+      const dup = r.status === 422 && /sha/i.test(await r.text().catch(() => ''));
+      if (!r.ok && !dup) throw new Error(r.status === 401 ? 'the key is wrong or expired' : 'GitHub ' + r.status);
+      fbSetQueue(fbQueue().filter(x => x.id !== f.id));
+    }
+    if (loud) toast('Feedback sent to Claude ✓');
+  } catch (e) { if (loud) toast('Saved on the phone, will send later (' + (e.message || e) + ')'); }
+  finally { fbBusy = false; }
+}
+function feedbackSheet() {
+  const q = fbQueue().length, key = !!localStorage.getItem(FB_KEY);
+  openSheet(`<h3>Feedback for Claude</h3>
+    <p class="explain" style="margin:0 0 10px">Ideas, bugs, wishes. Claude reads them the next time you work on Liftbook.</p>
+    <form id="fbForm"><label class="field"><span>Your feedback</span><textarea name="t" rows="5" placeholder="e.g. After seated leg curl it should…"></textarea></label>
+    <p class="explain" style="margin:0 0 10px;font-size:13px">Sent with: ${esc(fbContext())}</p>
+    <button class="btn primary block" type="submit">Send</button></form>
+    ${q ? `<p class="explain" style="margin-top:10px">${q} waiting to be sent. <button class="link" data-act="fb-retry">Send now</button></p>` : ''}
+    <details style="margin-top:16px"><summary class="explain">Key: ${key ? 'set ✓' : 'not set'}</summary>
+      <label class="field" style="margin-top:8px"><span>GitHub key (app-data repo only)</span><input id="fbKey" type="password" autocomplete="off" placeholder="${key ? 'paste to replace' : 'github_pat_…'}"></label>
+      <button class="btn block" data-act="fb-key">Save key</button></details>`);
+}
+addEventListener('online', () => fbFlush());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) fbFlush(); });
+
 /* ============ unfinished workout (v9) ============ */
 // A gym workout or physio session where Finish was never pressed: when Liftbook is opened (or comes back to the
 // screen) and nothing in it changed for 3 hours, a sheet offers Save it (every set with numbers, ticked or not,
@@ -2569,7 +2643,7 @@ document.addEventListener('click', e => {
 /* ============ boot ============ */
 computeFactors(); recomputePRs(); addPhysioPress(); physioV5(); physioTempo(); addCableRow(); applyPics();
 if (getActive() || PH().active) ui.tab = 'train';
-render(); renderRest(); checkStale();
+render(); renderRest(); checkStale(); fbFlush();
 importKeep().then(importPhysio);
 loadPhotos().then(() => { dropUnusedPics(); if (photos.length) photoRefresh(); });
 try { navigator.storage?.persist?.(); } catch (e) {}
